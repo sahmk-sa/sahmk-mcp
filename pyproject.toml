@@ -1,0 +1,30 @@
+[project]
+name = "sahmk-mcp"
+version = "0.1.0"
+description = "Official MCP server for Sahmk — AI agent access to Saudi market data, company profiles, and historical market data."
+readme = "README.md"
+license = { text = "MIT" }
+requires-python = ">=3.10"
+authors = [{ name = "Sahmk" }]
+keywords = ["mcp", "sahmk", "saudi", "stocks", "tadawul", "market-data"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+]
+dependencies = [
+    "sahmk>=0.6.0",
+    "fastmcp>=2.0.0",
+]
+
+[project.scripts]
+sahmk-mcp = "sahmk_mcp.server:main"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
