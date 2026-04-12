@@ -8,7 +8,7 @@ Official MCP server for [Sahmk](https://sahmk.sa/developers) — gives AI agents
 |------|-------------|
 | `get_quote` | Real-time quote for a single stock (price, change, volume, liquidity) |
 | `get_quotes` | Batch quotes for multiple stocks (up to 50) |
-| `get_market_summary` | TASI index, volume, advancing/declining, market mood |
+| `get_market_summary` | Market summary for `TASI` or `NOMU` (optional `index`), including delay metadata when available |
 | `get_company` | Company profile, sector, fundamentals |
 | `get_historical` | Historical OHLCV data (daily/weekly/monthly) |
 
@@ -72,6 +72,7 @@ sahmk-mcp
 - "What's the current price of Aramco (2222)?"
 - "Compare 2222 and 1120"
 - "Show me the Saudi market summary"
+- "Show me NOMU market summary (index NOMUC is also accepted)"
 - "Get historical prices for Al Rajhi Bank (1120) for the last 3 months"
 - "Tell me about STC (7010)"
 

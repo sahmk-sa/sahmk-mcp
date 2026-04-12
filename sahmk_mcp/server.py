@@ -17,7 +17,7 @@ mcp = FastMCP(
         "for 350+ listed stocks. Stock symbols are numeric codes "
         "(e.g. '2222' for Aramco, '1120' for Al Rajhi Bank, '7010' for STC). "
         "Use get_quote for a single stock price, get_quotes to compare multiple stocks, "
-        "get_market_summary for the overall market, get_company for company details, "
+        "get_market_summary for the overall market (optionally by index), get_company for company details, "
         "and get_historical for past price data."
     ),
 )
@@ -66,11 +66,16 @@ def get_quotes(
 
 
 @mcp.tool
-def get_market_summary() -> dict:
+def get_market_summary(
+    index: Annotated[
+        Optional[str],
+        "Optional market index: 'TASI' or 'NOMU' (alias 'NOMUC' is accepted and normalized).",
+    ] = None,
+) -> dict:
     """Get the current Saudi market summary including TASI index level, change, market direction, and advancing/declining stock counts.
     Use this for questions about the overall market today."""
     client = _get_client()
-    return client.market_summary().raw
+    return client.market_summary(index=index).raw
 
 
 @mcp.tool
