@@ -11,7 +11,11 @@ This MCP exposes agent-friendly tools on top of the Sahmk API and SDK layer, so 
 | `get_quote` | One symbol snapshot (price, change, volume, liquidity) |
 | `get_quotes` | Multi-symbol comparison in one call (up to 50 symbols) |
 | `get_market_summary` | Market summary for `TASI`/`NOMU` with delay metadata |
+| `get_market_movers` | Top movers by `gainers`, `losers`, `volume`, or `value` (optional index) |
+| `get_sectors` | Sector performance snapshot for `TASI`/`NOMU` |
 | `get_company` | Company profile, sector, and fundamentals |
+| `get_financials` | Financial statements (income, balance sheet, cash flow) |
+| `get_dividends` | Dividend history and yield data |
 | `get_historical` | Historical OHLCV series |
 
 ## When to Use MCP vs SDK
@@ -85,6 +89,8 @@ sahmk-mcp
 ## Tool Input Constraints
 
 - `get_market_summary.index`: `TASI` or `NOMU` (`NOMUC` alias is accepted and normalized).
+- `get_market_movers.type`: `gainers`, `losers`, `volume`, or `value`.
+- `get_market_movers.limit`: integer from 1 to 50.
 - `get_quotes.symbols`: maximum 50 symbols per request.
 - `get_historical.interval`: `1d`, `1w`, or `1m`.
 - Invalid symbols return an error response from the underlying API.
@@ -92,8 +98,13 @@ sahmk-mcp
 ## Example Prompts
 
 - "Give me a TASI summary and market mood."
+- "Give me TASI market movers by gainers."
+- "Give me NOMU market movers by value."
+- "Show me sector performance."
 - "Compare 2222, 1120, and 7010 by price change and net liquidity."
 - "Show me NOMU summary for today."
+- "Get financials for 2222."
+- "Get dividends for 2222."
 - "Get 1d historical data for 1120 from 2026-01-01 to 2026-03-31."
 - "Tell me about STC (7010) and its sector."
 

@@ -17,7 +17,8 @@ mcp = FastMCP(
         "for 350+ listed stocks. Stock symbols are numeric codes "
         "(e.g. '2222' for Aramco, '1120' for Al Rajhi Bank, '7010' for STC). "
         "Use get_quote for a single stock price, get_quotes to compare multiple stocks, "
-        "get_market_summary for the overall market (optionally by index), get_company for company details, "
+        "get_market_summary for the overall market (optionally by index), get_market_movers for top gainers/losers/leaders, "
+        "get_sectors for sector performance, get_company for company details, get_financials and get_dividends for fundamentals, "
         "and get_historical for past price data."
     ),
 )
@@ -79,6 +80,57 @@ def get_market_summary(
 
 
 @mcp.tool
+def get_market_movers(
+    type: Annotated[
+        str,
+        "Mover type: 'gainers', 'losers', 'volume', or 'value'.",
+    ],
+    limit: Annotated[
+        Optional[int],
+        "Optional number of results from 1 to 50.",
+    ] = None,
+    index: Annotated[
+        Optional[str],
+        "Optional market index: 'TASI' or 'NOMU' (alias 'NOMUC' is accepted and normalized).",
+    ] = None,
+) -> dict:
+    """Get market movers in one curated endpoint.
+    Use this for top gainers, top losers, highest volume leaders, or highest value leaders."""
+    mover_handlers = {
+        "gainers": "gainers",
+        "losers": "losers",
+        "volume": "volume_leaders",
+        "value": "value_leaders",
+    }
+    if type not in mover_handlers:
+        raise ValueError(
+            f"Invalid type: '{type}'. Must be one of: gainers, losers, volume, value."
+        )
+    if limit is not None and (not isinstance(limit, int) or limit < 1 or limit > 50):
+        raise ValueError(
+            f"Invalid limit: '{limit}'. Must be between 1 and 50."
+        )
+
+    client = _get_client()
+    method_name = mover_handlers[type]
+    mover_method = getattr(client, method_name)
+    return mover_method(limit=limit, index=index).raw
+
+
+@mcp.tool
+def get_sectors(
+    index: Annotated[
+        Optional[str],
+        "Optional market index: 'TASI' or 'NOMU' (alias 'NOMUC' is accepted and normalized).",
+    ] = None,
+) -> dict:
+    """Get sector performance for the Saudi market.
+    Use this when the user asks for sector-level market moves or a sector snapshot."""
+    client = _get_client()
+    return client.sectors(index=index).raw
+
+
+@mcp.tool
 def get_company(
     symbol: Annotated[str, "Stock symbol (e.g. '2222' for Aramco)"],
 ) -> dict:
@@ -86,6 +138,26 @@ def get_company(
     Use this when the user asks about a company's profile, key metrics, or detailed information."""
     client = _get_client()
     return client.company(symbol).raw
+
+
+@mcp.tool
+def get_financials(
+    symbol: Annotated[str, "Stock symbol (e.g. '2222' for Aramco)"],
+) -> dict:
+    """Get company financial statements and key financial data.
+    Use this for income statement, balance sheet, and cash flow requests."""
+    client = _get_client()
+    return client.financials(symbol).raw
+
+
+@mcp.tool
+def get_dividends(
+    symbol: Annotated[str, "Stock symbol (e.g. '2222' for Aramco)"],
+) -> dict:
+    """Get company dividend history and yield data.
+    Use this when the user asks for dividends or payout history."""
+    client = _get_client()
+    return client.dividends(symbol).raw
 
 
 @mcp.tool
