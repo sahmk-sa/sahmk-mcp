@@ -1,16 +1,25 @@
 # sahmk-mcp
 
-Official MCP server for [Sahmk](https://sahmk.sa/developers) — gives AI agents access to real-time and historical Saudi stock market (Tadawul) data.
+Official MCP server for [Sahmk](https://sahmk.sa/developers) — use Saudi market data inside AI agents such as Cursor and Claude Desktop.
+
+This MCP exposes agent-friendly tools on top of the Sahmk API and SDK layer, so assistants can answer market questions in natural language.
 
 ## Tools
 
-| Tool | Description |
-|------|-------------|
-| `get_quote` | Real-time quote for a single stock (price, change, volume, liquidity) |
-| `get_quotes` | Batch quotes for multiple stocks (up to 50) |
-| `get_market_summary` | Market summary for `TASI` or `NOMU` (optional `index`), including delay metadata when available |
-| `get_company` | Company profile, sector, fundamentals |
-| `get_historical` | Historical OHLCV data (daily/weekly/monthly) |
+| Tool | Use it for |
+|------|------------|
+| `get_quote` | One symbol snapshot (price, change, volume, liquidity) |
+| `get_quotes` | Multi-symbol comparison in one call (up to 50 symbols) |
+| `get_market_summary` | Market summary for `TASI`/`NOMU` with delay metadata |
+| `get_company` | Company profile, sector, and fundamentals |
+| `get_historical` | Historical OHLCV series |
+
+## When to Use MCP vs SDK
+
+- Use **MCP** for interactive agent workflows in tools like Cursor and Claude Desktop.
+- Use the **Python SDK** for scripts, automation, dashboards, alerts, backtests, and application code.
+
+SDK repo: [sahmk-sa/sahmk-python](https://github.com/sahmk-sa/sahmk-python)
 
 ## Get Your API Key
 
@@ -23,6 +32,12 @@ Official MCP server for [Sahmk](https://sahmk.sa/developers) — gives AI agents
 ```bash
 pip install sahmk-mcp
 ```
+
+## Security
+
+- Set API keys via environment variables (`SAHMK_API_KEY`).
+- Never commit keys to source control or share them in logs.
+- Rotate exposed keys immediately from your Sahmk dashboard.
 
 ## Configuration
 
@@ -60,22 +75,28 @@ Add to `.cursor/mcp.json`:
 }
 ```
 
-### Running Directly
+### Run Directly
 
 ```bash
 export SAHMK_API_KEY="your_api_key"
 sahmk-mcp
 ```
 
+## Tool Input Constraints
+
+- `get_market_summary.index`: `TASI` or `NOMU` (`NOMUC` alias is accepted and normalized).
+- `get_quotes.symbols`: maximum 50 symbols per request.
+- `get_historical.interval`: `1d`, `1w`, or `1m`.
+- Invalid symbols return an error response from the underlying API.
+
 ## Example Prompts
 
-- "What's the current price of Aramco (2222)?"
-- "Compare 2222 and 1120"
-- "Show me the Saudi market summary"
-- "Show me NOMU market summary (index NOMUC is also accepted)"
-- "Get historical prices for Al Rajhi Bank (1120) for the last 3 months"
-- "Tell me about STC (7010)"
+- "Give me a TASI summary and market mood."
+- "Compare 2222, 1120, and 7010 by price change and net liquidity."
+- "Show me NOMU summary for today."
+- "Get 1d historical data for 1120 from 2026-01-01 to 2026-03-31."
+- "Tell me about STC (7010) and its sector."
 
 ## License
 
-MIT — see [LICENSE](LICENSE)
+MIT — see [LICENSE](https://github.com/sahmk-sa/sahmk-mcp/blob/main/LICENSE)

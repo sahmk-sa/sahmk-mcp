@@ -1,12 +1,12 @@
 [project]
 name = "sahmk-mcp"
 version = "0.1.1"
-description = "Official MCP server for Sahmk — AI agent access to Saudi market data, company profiles, and historical market data."
+description = "Official MCP server for Sahmk — use Saudi market data inside AI agents like Cursor and Claude."
 readme = "README.md"
 license = { text = "MIT" }
 requires-python = ">=3.10"
 authors = [{ name = "Sahmk" }]
-keywords = ["mcp", "sahmk", "saudi", "stocks", "tadawul", "market-data"]
+keywords = ["mcp", "sahmk", "saudi-arabia", "stocks", "tadawul", "market-data", "ai-agents", "cursor", "claude"]
 classifiers = [
     "Development Status :: 4 - Beta",
     "Intended Audience :: Developers",
@@ -16,6 +16,8 @@ classifiers = [
     "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: 3.12",
     "Programming Language :: Python :: 3.13",
+    "Topic :: Office/Business :: Financial",
+    "Topic :: Software Development :: Libraries :: Python Modules",
 ]
 dependencies = [
     "sahmk>=0.6.2",
