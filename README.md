@@ -11,11 +11,11 @@ This MCP exposes agent-friendly tools on top of the Sahmk API and SDK layer, so 
 | `get_quote` | One symbol snapshot (price, change, volume, liquidity) |
 | `get_quotes` | Multi-symbol comparison in one call (up to 50 symbols) |
 | `get_market_summary` | Market summary for `TASI`/`NOMU` with delay metadata |
-| `get_market_movers` | Top movers by `gainers`, `losers`, `volume`, or `value` (optional index) |
-| `get_sectors` | Sector performance snapshot for `TASI`/`NOMU` |
+| `get_market_movers` | Top movers by `gainers`, `losers`, `volume`, or `value` (optional index); stable output with `type`, `index`, `count`, `items` |
+| `get_sectors` | Sector performance snapshot for `TASI`/`NOMU`; stable output with `index`, `count`, `items` |
 | `get_company` | Company profile, sector, and fundamentals |
-| `get_financials` | Financial statements (income, balance sheet, cash flow) |
-| `get_dividends` | Dividend history and yield data |
+| `get_financials` | Financial statements (income, balance sheet, cash flow) *(Starter+ plan)* |
+| `get_dividends` | Dividend history and yield data *(Starter+ plan)* |
 | `get_historical` | Historical OHLCV series |
 
 ## When to Use MCP vs SDK
@@ -107,6 +107,8 @@ sahmk-mcp
 - "Get dividends for 2222."
 - "Get 1d historical data for 1120 from 2026-01-01 to 2026-03-31."
 - "Tell me about STC (7010) and its sector."
+
+Note: `get_financials` and `get_dividends` are plan-gated by Sahmk API access (Starter+). If unavailable for a key, the MCP will return the underlying API error.
 
 ## License
 

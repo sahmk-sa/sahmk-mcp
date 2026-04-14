@@ -41,6 +41,62 @@ def _validate_date(value: str | None, name: str) -> None:
         )
 
 
+def _normalize_market_movers_response(mover_type: str, raw: dict) -> dict:
+    list_key_map = {
+        "gainers": "gainers",
+        "losers": "losers",
+        "volume": "stocks",
+        "value": "stocks",
+    }
+    items = raw.get(list_key_map[mover_type]) or []
+    if not isinstance(items, list):
+        items = []
+    count = raw.get("count")
+    if not isinstance(count, int):
+        count = len(items)
+    return {
+        "type": mover_type,
+        "index": raw.get("index"),
+        "count": count,
+        "items": items,
+    }
+
+
+def _normalize_sectors_response(raw: dict) -> dict:
+    items = raw.get("sectors") or []
+    if not isinstance(items, list):
+        items = []
+    count = raw.get("count")
+    if not isinstance(count, int):
+        count = len(items)
+    return {
+        "index": raw.get("index"),
+        "count": count,
+        "items": items,
+    }
+
+
+def _normalize_financials_response(raw: dict) -> dict:
+    normalized = dict(raw)
+    normalized.setdefault("symbol", None)
+    normalized.setdefault("income_statements", [])
+    normalized.setdefault("balance_sheets", [])
+    normalized.setdefault("cash_flows", [])
+    return normalized
+
+
+def _normalize_dividends_response(raw: dict) -> dict:
+    normalized = dict(raw)
+    normalized.setdefault("symbol", None)
+    normalized.setdefault("current_price", None)
+    normalized.setdefault("trailing_12m_yield", None)
+    normalized.setdefault("trailing_12m_dividends", None)
+    normalized.setdefault("payments_last_year", None)
+    normalized.setdefault("upcoming", [])
+    normalized.setdefault("history", [])
+    return normalized
+
+
 @mcp.tool
 def get_quote(
     symbol: Annotated[str, "Stock symbol (e.g. '2222' for Aramco, '1120' for Al Rajhi)"],
@@ -95,7 +151,8 @@ def get_market_movers(
     ] = None,
 ) -> dict:
     """Get market movers in one curated endpoint.
-    Use this for top gainers, top losers, highest volume leaders, or highest value leaders."""
+    Use this for top gainers, top losers, highest volume leaders, or highest value leaders.
+    Returns a stable schema: type, index, count, items."""
     mover_handlers = {
         "gainers": "gainers",
         "losers": "losers",
@@ -114,7 +171,8 @@ def get_market_movers(
     client = _get_client()
     method_name = mover_handlers[type]
     mover_method = getattr(client, method_name)
-    return mover_method(limit=limit, index=index).raw
+    raw = mover_method(limit=limit, index=index).raw
+    return _normalize_market_movers_response(type, raw)
 
 
 @mcp.tool
@@ -125,9 +183,11 @@ def get_sectors(
     ] = None,
 ) -> dict:
     """Get sector performance for the Saudi market.
-    Use this when the user asks for sector-level market moves or a sector snapshot."""
+    Use this when the user asks for sector-level market moves or a sector snapshot.
+    Returns a stable schema: index, count, items."""
     client = _get_client()
-    return client.sectors(index=index).raw
+    raw = client.sectors(index=index).raw
+    return _normalize_sectors_response(raw)
 
 
 @mcp.tool
@@ -147,7 +207,8 @@ def get_financials(
     """Get company financial statements and key financial data.
     Use this for income statement, balance sheet, and cash flow requests."""
     client = _get_client()
-    return client.financials(symbol).raw
+    raw = client.financials(symbol).raw
+    return _normalize_financials_response(raw)
 
 
 @mcp.tool
@@ -157,7 +218,8 @@ def get_dividends(
     """Get company dividend history and yield data.
     Use this when the user asks for dividends or payout history."""
     client = _get_client()
-    return client.dividends(symbol).raw
+    raw = client.dividends(symbol).raw
+    return _normalize_dividends_response(raw)
 
 
 @mcp.tool
