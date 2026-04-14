@@ -2,21 +2,21 @@
 
 Official MCP server for [Sahmk](https://sahmk.sa/developers) — use Saudi market data inside AI agents such as Cursor and Claude Desktop.
 
-This MCP exposes agent-friendly tools on top of the Sahmk API and SDK layer, so assistants can answer market questions in natural language.
+This MCP exposes a curated set of Sahmk tools for AI agents, so assistants can query the Saudi market in natural language.
 
 ## Tools
 
 | Tool | Use it for |
 |------|------------|
-| `get_quote` | One symbol snapshot (price, change, volume, liquidity) |
-| `get_quotes` | Multi-symbol comparison in one call (up to 50 symbols) |
-| `get_market_summary` | Market summary for `TASI`/`NOMU` with delay metadata |
-| `get_market_movers` | Top movers by `gainers`, `losers`, `volume`, or `value` (optional index); stable output with `type`, `index`, `count`, `items` |
-| `get_sectors` | Sector performance snapshot for `TASI`/`NOMU`; stable output with `index`, `count`, `items` |
-| `get_company` | Company profile, sector, and fundamentals |
-| `get_financials` | Financial statements (income, balance sheet, cash flow) *(Starter+ plan)* |
+| `get_quote` | Snapshot for one symbol |
+| `get_quotes` | Compare multiple symbols in one call |
+| `get_market_summary` | Summary for `TASI` or `NOMU` |
+| `get_market_movers` | Top movers by `gainers`, `losers`, `volume`, or `value` |
+| `get_sectors` | Sector performance snapshot |
+| `get_company` | Company profile and fundamentals |
+| `get_financials` | Financial statements *(Starter+ plan)* |
 | `get_dividends` | Dividend history and yield data *(Starter+ plan)* |
-| `get_historical` | Historical OHLCV series |
+| `get_historical` | Historical OHLCV data |
 
 ## When to Use MCP vs SDK
 
@@ -93,7 +93,7 @@ sahmk-mcp
 - `get_market_movers.limit`: integer from 1 to 50.
 - `get_quotes.symbols`: maximum 50 symbols per request.
 - `get_historical.interval`: `1d`, `1w`, or `1m`.
-- Invalid symbols return an error response from the underlying API.
+- Invalid symbols and plan-gated requests return the underlying API error.
 
 ## Example Prompts
 
@@ -108,7 +108,7 @@ sahmk-mcp
 - "Get 1d historical data for 1120 from 2026-01-01 to 2026-03-31."
 - "Tell me about STC (7010) and its sector."
 
-Note: `get_financials` and `get_dividends` are plan-gated by Sahmk API access (Starter+). If unavailable for a key, the MCP will return the underlying API error.
+Note: `get_financials` and `get_dividends` require Sahmk API access on Starter or higher. If unavailable for the current key, the MCP returns the underlying API error.
 
 ## License
 
