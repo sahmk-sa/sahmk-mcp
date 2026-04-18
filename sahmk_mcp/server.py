@@ -9,6 +9,7 @@ from fastmcp import FastMCP
 from sahmk import SahmkClient, SahmkError
 
 _DATE_RE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
+_MIN_SAHMK_VERSION = (0, 7, 0)
 
 mcp = FastMCP(
     "sahmk",
@@ -26,6 +27,7 @@ mcp = FastMCP(
 
 
 def _get_client() -> SahmkClient:
+    _ensure_sahmk_min_version()
     api_key = os.environ.get("SAHMK_API_KEY")
     if not api_key:
         raise SahmkError(
@@ -33,6 +35,33 @@ def _get_client() -> SahmkClient:
             "Get your key at https://sahmk.sa/developers"
         )
     return SahmkClient(api_key)
+
+
+def _parse_semver(value: str) -> tuple[int, int, int]:
+    parts = value.split(".")
+    normalized: list[int] = []
+    for idx in range(3):
+        if idx >= len(parts):
+            normalized.append(0)
+            continue
+        token = parts[idx]
+        digits = "".join(ch for ch in token if ch.isdigit())
+        normalized.append(int(digits) if digits else 0)
+    return tuple(normalized)  # type: ignore[return-value]
+
+
+def _ensure_sahmk_min_version() -> None:
+    # Defer import to runtime so tests can patch module version safely.
+    import sahmk  # noqa: PLC0415
+
+    current = getattr(sahmk, "__version__", "0.0.0")
+    if _parse_semver(current) >= _MIN_SAHMK_VERSION:
+        return
+    min_text = ".".join(str(x) for x in _MIN_SAHMK_VERSION)
+    raise SahmkError(
+        f"sahmk>={min_text} is required for identifier-based quote resolution. "
+        f"Found sahmk=={current}. Run: pip install --upgrade 'sahmk>={min_text}'."
+    )
 
 
 def _validate_date(value: str | None, name: str) -> None:
@@ -100,6 +129,31 @@ def _raise_if_ambiguous_identifier(error: SahmkError, value: str) -> None:
         "Retry with a more specific name or a numeric symbol. "
         f"Candidates: {candidate_text}."
     ) from error
+
+
+def _is_unknown_identifier_error(error: SahmkError) -> bool:
+    code = (getattr(error, "error_code", "") or "").upper()
+    if "NOT_FOUND" in code:
+        return True
+    message = str(error).lower()
+    return (
+        "unknown identifier" in message
+        or "stock symbol" in message and "not found" in message
+    )
+
+
+def _is_numeric_identifier(value: str) -> bool:
+    return bool(value and value.isdigit())
+
+
+def _extract_first_quote(raw: dict) -> Optional[dict]:
+    quotes = raw.get("quotes")
+    if not isinstance(quotes, list) or not quotes:
+        return None
+    first = quotes[0]
+    if isinstance(first, dict):
+        return first
+    return None
 
 
 def _resolve_single_identifier(
@@ -209,7 +263,23 @@ def get_quote(
     try:
         return client.quote(normalized_identifier).raw
     except SahmkError as error:
-        _raise_if_ambiguous_identifier(error, normalized_identifier)
+        try:
+            _raise_if_ambiguous_identifier(error, normalized_identifier)
+        except SahmkError:
+            # Some backends may fail single-quote name resolution while batch
+            # identifier resolution succeeds. Keep resolution backend/SDK-based.
+            if _is_unknown_identifier_error(error) and not _is_numeric_identifier(
+                normalized_identifier
+            ):
+                try:
+                    batch_raw = client.quotes([normalized_identifier]).raw
+                    first = _extract_first_quote(batch_raw)
+                    if first is not None:
+                        return first
+                except SahmkError as batch_error:
+                    _raise_if_ambiguous_identifier(batch_error, normalized_identifier)
+                    raise batch_error
+            raise error
 
 
 @mcp.tool

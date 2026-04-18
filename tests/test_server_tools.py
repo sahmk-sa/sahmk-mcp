@@ -6,6 +6,18 @@ from sahmk_mcp import server
 
 
 class TestNewCuratedTools(unittest.TestCase):
+    def test_ensure_sahmk_min_version_allows_supported_version(self):
+        with patch("sahmk.__version__", "0.7.0"):
+            server._ensure_sahmk_min_version()
+
+    def test_ensure_sahmk_min_version_blocks_old_version(self):
+        with patch("sahmk.__version__", "0.6.2"):
+            with self.assertRaisesRegex(
+                SahmkError,
+                r"sahmk>=0\.7\.0 is required for identifier-based quote resolution",
+            ):
+                server._ensure_sahmk_min_version()
+
     @patch("sahmk_mcp.server._get_client")
     def test_get_quote_accepts_flexible_identifier(self, mock_get_client):
         client = MagicMock()
@@ -58,6 +70,44 @@ class TestNewCuratedTools(unittest.TestCase):
             "AMBIGUOUS_IDENTIFIER: 'ساب' matched multiple stocks",
         ):
             server.get_quote(identifier="ساب")
+
+    @patch("sahmk_mcp.server._get_client")
+    def test_get_quote_falls_back_to_batch_resolution(self, mock_get_client):
+        client = MagicMock()
+        client.quote.side_effect = SahmkError(
+            "Unknown identifier '?': Stock symbol 'الراجحي' not found.",
+            status_code=404,
+            error_code="SYMBOL_NOT_FOUND",
+        )
+        client.quotes.return_value.raw = {
+            "count": 1,
+            "quotes": [{"symbol": "1120", "name": "الراجحي"}],
+        }
+        mock_get_client.return_value = client
+
+        result = server.get_quote(identifier="الراجحي")
+
+        self.assertEqual(result["symbol"], "1120")
+        client.quote.assert_called_once_with("الراجحي")
+        client.quotes.assert_called_once_with(["الراجحي"])
+
+    @patch("sahmk_mcp.server._get_client")
+    def test_get_quote_numeric_not_found_does_not_fallback_to_batch(
+        self, mock_get_client
+    ):
+        client = MagicMock()
+        client.quote.side_effect = SahmkError(
+            "API error 404: Stock symbol '9999' not found.",
+            status_code=404,
+            error_code="SYMBOL_NOT_FOUND",
+        )
+        mock_get_client.return_value = client
+
+        with self.assertRaises(SahmkError):
+            server.get_quote(identifier="9999")
+
+        client.quote.assert_called_once_with("9999")
+        client.quotes.assert_not_called()
 
     @patch("sahmk_mcp.server._get_client")
     def test_get_quotes_accepts_flexible_identifiers(self, mock_get_client):
