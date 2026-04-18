@@ -8,8 +8,8 @@ This MCP exposes a curated set of Sahmk tools for AI agents, so assistants can q
 
 | Tool | Use it for |
 |------|------------|
-| `get_quote` | Snapshot for one symbol |
-| `get_quotes` | Compare multiple symbols in one call |
+| `get_quote` | Snapshot for one stock identifier (symbol, name, or alias) |
+| `get_quotes` | Compare multiple stock identifiers in one call |
 | `get_market_summary` | Summary for `TASI` or `NOMU` |
 | `get_market_movers` | Top movers by `gainers`, `losers`, `volume`, or `value` |
 | `get_sectors` | Sector performance snapshot |
@@ -17,6 +17,13 @@ This MCP exposes a curated set of Sahmk tools for AI agents, so assistants can q
 | `get_financials` | Financial statements *(Starter+ plan)* |
 | `get_dividends` | Dividend history and yield data *(Starter+ plan)* |
 | `get_historical` | Historical OHLCV data |
+
+## Identifier-First Contract
+
+- Canonical inputs for quote tools are `identifier` and `identifiers`.
+- Legacy aliases `symbol` and `symbols` are still accepted for compatibility.
+- Prefer canonical keys in prompts, tool calls, and client templates.
+- Resolution is backend/SDK-backed (names, aliases, and symbols); MCP does not maintain its own symbol map.
 
 ## When to Use MCP vs SDK
 
@@ -91,9 +98,20 @@ sahmk-mcp
 - `get_market_summary.index`: `TASI` or `NOMU` (`NOMUC` alias is accepted and normalized).
 - `get_market_movers.type`: `gainers`, `losers`, `volume`, or `value`.
 - `get_market_movers.limit`: integer from 1 to 50.
-- `get_quotes.symbols`: maximum 50 symbols per request.
+- `get_quote.identifier` *(preferred)*: accepts numeric symbol, Arabic/English company name, or known alias.
+- `get_quote.symbol` *(legacy alias)*: accepted for backward compatibility.
+- `get_quotes.identifiers` *(preferred)*: maximum 50 identifiers per request.
+- `get_quotes.symbols` *(legacy alias)*: accepted for backward compatibility.
 - `get_historical.interval`: `1d`, `1w`, or `1m`.
-- Invalid symbols and plan-gated requests return the underlying API error.
+- Ambiguous identifiers raise `AMBIGUOUS_IDENTIFIER` with retry guidance and candidates when available.
+- Invalid identifiers and plan-gated requests return the underlying API error.
+
+### Tool Call Examples
+
+- Preferred single quote call: `get_quote(identifier="أرامكو")`
+- Legacy single quote call: `get_quote(symbol="2222")`
+- Preferred batch quote call: `get_quotes(identifiers=["سبكيم", "كيان"])`
+- Legacy batch quote call: `get_quotes(symbols=["2222", "1120"])`
 
 ## Example Prompts
 
@@ -101,12 +119,12 @@ sahmk-mcp
 - "Give me TASI market movers by gainers."
 - "Give me NOMU market movers by value."
 - "Show me sector performance."
-- "Compare 2222, 1120, and 7010 by price change and net liquidity."
+- "Compare سابك, سبكيم, and 2222 by price change and net liquidity."
 - "Show me NOMU summary for today."
 - "Get financials for 2222."
 - "Get dividends for 2222."
 - "Get 1d historical data for 1120 from 2026-01-01 to 2026-03-31."
-- "Tell me about STC (7010) and its sector."
+- "Tell me about الراجحي and its sector."
 
 Note: `get_financials` and `get_dividends` require Sahmk API access on Starter or higher. If unavailable for the current key, the MCP returns the underlying API error.
 
