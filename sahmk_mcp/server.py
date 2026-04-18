@@ -14,8 +14,9 @@ mcp = FastMCP(
     "sahmk",
     instructions=(
         "SAHMK provides real-time and historical Saudi stock market (Tadawul) data "
-        "for 350+ listed stocks. Stock symbols are numeric codes "
-        "(e.g. '2222' for Aramco, '1120' for Al Rajhi Bank, '7010' for STC). "
+        "for 350+ listed stocks. Stock inputs can be numeric symbols "
+        "(e.g. '2222' for Aramco, '1120' for Al Rajhi Bank, '7010' for STC) "
+        "or company names/aliases supported by the backend resolver. "
         "Use get_quote for a single stock price, get_quotes to compare multiple stocks, "
         "get_market_summary for the overall market (optionally by index), get_market_movers for top gainers/losers/leaders, "
         "get_sectors for sector performance, get_company for company details, get_financials and get_dividends for fundamentals, "
@@ -39,6 +40,99 @@ def _validate_date(value: str | None, name: str) -> None:
         raise ValueError(
             f"Invalid {name} format: '{value}'. Expected YYYY-MM-DD (e.g. '2026-01-15')."
         )
+
+
+def _extract_error_payload(error: SahmkError) -> dict:
+    response = getattr(error, "response", None)
+    if response is None:
+        return {}
+    try:
+        payload = response.json()
+    except Exception:
+        return {}
+    if isinstance(payload, dict):
+        return payload
+    return {}
+
+
+def _extract_ambiguity_candidates(payload: dict) -> list[str]:
+    error = payload.get("error")
+    if not isinstance(error, dict):
+        return []
+    details = error.get("details")
+    if not isinstance(details, dict):
+        return []
+    raw_candidates = details.get("candidates")
+    if not isinstance(raw_candidates, list):
+        return []
+
+    candidates: list[str] = []
+    for item in raw_candidates:
+        if isinstance(item, str):
+            text = item.strip()
+            if text:
+                candidates.append(text)
+        elif isinstance(item, dict):
+            # Prefer symbol in candidate objects, then fall back to a name.
+            symbol = item.get("symbol")
+            name = item.get("name")
+            value = symbol if isinstance(symbol, str) else name
+            if isinstance(value, str):
+                text = value.strip()
+                if text:
+                    candidates.append(text)
+    return candidates
+
+
+def _raise_if_ambiguous_identifier(error: SahmkError, value: str) -> None:
+    code = (getattr(error, "error_code", "") or "").upper()
+    message = str(error).lower()
+    is_ambiguous = "AMBIGU" in code or "ambiguous" in message
+    if not is_ambiguous:
+        raise error
+
+    payload = _extract_error_payload(error)
+    candidates = _extract_ambiguity_candidates(payload)
+    candidate_text = ", ".join(candidates) if candidates else "(not provided)"
+    raise ValueError(
+        "AMBIGUOUS_IDENTIFIER: "
+        f"'{value}' matched multiple stocks. "
+        "Retry with a more specific name or a numeric symbol. "
+        f"Candidates: {candidate_text}."
+    ) from error
+
+
+def _resolve_single_identifier(
+    identifier: Optional[str],
+    symbol: Optional[str],
+) -> str:
+    if identifier is not None and symbol is not None and identifier != symbol:
+        raise ValueError(
+            "Conflicting inputs: provide either 'identifier' (preferred) "
+            "or legacy 'symbol', not both with different values."
+        )
+    value = identifier if identifier is not None else symbol
+    if value is None or not isinstance(value, str) or not value.strip():
+        raise ValueError(
+            "Missing required stock input: provide 'identifier' "
+            "(preferred) or legacy 'symbol'."
+        )
+    return value.strip()
+
+
+def _resolve_batch_identifiers(
+    identifiers: Optional[list[str]],
+    symbols: Optional[list[str]],
+) -> list[str]:
+    if identifiers is not None and symbols is not None and identifiers != symbols:
+        raise ValueError(
+            "Conflicting inputs: provide either 'identifiers' (preferred) "
+            "or legacy 'symbols', not both with different values."
+        )
+    values = identifiers if identifiers is not None else symbols
+    if not values:
+        raise ValueError("At least one identifier is required.")
+    return values
 
 
 def _normalize_market_movers_response(mover_type: str, raw: dict) -> dict:
@@ -99,27 +193,45 @@ def _normalize_dividends_response(raw: dict) -> dict:
 
 @mcp.tool
 def get_quote(
-    symbol: Annotated[str, "Stock symbol (e.g. '2222' for Aramco, '1120' for Al Rajhi)"],
+    identifier: Annotated[
+        Optional[str],
+        "Stock identifier (preferred): symbol, Arabic/English name, or known alias, e.g. '2222', 'أرامكو', 'الراجحي'.",
+    ] = None,
+    symbol: Annotated[
+        Optional[str],
+        "Legacy alias for identifier. Prefer 'identifier'.",
+    ] = None,
 ) -> dict:
     """Get a real-time quote for a Saudi stock.
     Use this when the user asks for the current price, change, bid/ask, or trading activity of one stock."""
+    normalized_identifier = _resolve_single_identifier(identifier, symbol)
     client = _get_client()
-    return client.quote(symbol).raw
+    try:
+        return client.quote(normalized_identifier).raw
+    except SahmkError as error:
+        _raise_if_ambiguous_identifier(error, normalized_identifier)
 
 
 @mcp.tool
 def get_quotes(
+    identifiers: Annotated[
+        Optional[list[str]],
+        "List of stock identifiers (preferred): symbol, Arabic/English name, or alias, up to 50 (e.g. ['2222', 'سابك']).",
+    ] = None,
     symbols: Annotated[
-        list[str],
-        "List of stock symbols, up to 50 (e.g. ['2222', '1120'])",
-    ],
+        Optional[list[str]],
+        "Legacy alias for identifiers. Prefer 'identifiers'.",
+    ] = None,
 ) -> dict:
     """Get real-time quotes for multiple Saudi stocks in one call.
     Use this when the user wants to compare several stocks or asks for prices of more than one symbol."""
-    if not symbols:
-        raise ValueError("At least one symbol is required.")
+    normalized_identifiers = _resolve_batch_identifiers(identifiers, symbols)
     client = _get_client()
-    return client.quotes(symbols).raw
+    try:
+        return client.quotes(normalized_identifiers).raw
+    except SahmkError as error:
+        joined = ", ".join(normalized_identifiers)
+        _raise_if_ambiguous_identifier(error, joined)
 
 
 @mcp.tool
@@ -192,39 +304,60 @@ def get_sectors(
 
 @mcp.tool
 def get_company(
-    symbol: Annotated[str, "Stock symbol (e.g. '2222' for Aramco)"],
+    identifier: Annotated[
+        str,
+        "Stock identifier (symbol, Arabic/English name, or alias), e.g. '2222', 'أرامكو'.",
+    ],
 ) -> dict:
     """Get a company profile for a Saudi stock, including sector, industry, fundamentals, valuation, technical indicators, and analyst consensus.
     Use this when the user asks about a company's profile, key metrics, or detailed information."""
     client = _get_client()
-    return client.company(symbol).raw
+    try:
+        return client.company(identifier).raw
+    except SahmkError as error:
+        _raise_if_ambiguous_identifier(error, identifier)
 
 
 @mcp.tool
 def get_financials(
-    symbol: Annotated[str, "Stock symbol (e.g. '2222' for Aramco)"],
+    identifier: Annotated[
+        str,
+        "Stock identifier (symbol, Arabic/English name, or alias), e.g. '2222', 'أرامكو'.",
+    ],
 ) -> dict:
     """Get company financial statements and key financial data.
     Use this for income statement, balance sheet, and cash flow requests."""
     client = _get_client()
-    raw = client.financials(symbol).raw
+    try:
+        raw = client.financials(identifier).raw
+    except SahmkError as error:
+        _raise_if_ambiguous_identifier(error, identifier)
     return _normalize_financials_response(raw)
 
 
 @mcp.tool
 def get_dividends(
-    symbol: Annotated[str, "Stock symbol (e.g. '2222' for Aramco)"],
+    identifier: Annotated[
+        str,
+        "Stock identifier (symbol, Arabic/English name, or alias), e.g. '2222', 'أرامكو'.",
+    ],
 ) -> dict:
     """Get company dividend history and yield data.
     Use this when the user asks for dividends or payout history."""
     client = _get_client()
-    raw = client.dividends(symbol).raw
+    try:
+        raw = client.dividends(identifier).raw
+    except SahmkError as error:
+        _raise_if_ambiguous_identifier(error, identifier)
     return _normalize_dividends_response(raw)
 
 
 @mcp.tool
 def get_historical(
-    symbol: Annotated[str, "Stock symbol (e.g. '2222')"],
+    identifier: Annotated[
+        str,
+        "Stock identifier (symbol, Arabic/English name, or alias), e.g. '2222', 'الراجحي'.",
+    ],
     from_date: Annotated[
         Optional[str], "Start date in YYYY-MM-DD format (default: 30 days ago)"
     ] = None,
@@ -244,9 +377,12 @@ def get_historical(
             f"Invalid interval: '{interval}'. Must be '1d' (daily), '1w' (weekly), or '1m' (monthly)."
         )
     client = _get_client()
-    return client.historical(
-        symbol, from_date=from_date, to_date=to_date, interval=interval
-    ).raw
+    try:
+        return client.historical(
+            identifier, from_date=from_date, to_date=to_date, interval=interval
+        ).raw
+    except SahmkError as error:
+        _raise_if_ambiguous_identifier(error, identifier)
 
 
 def main():
