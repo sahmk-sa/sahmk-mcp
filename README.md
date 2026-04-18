@@ -44,6 +44,8 @@ SDK repo: [sahmk-sa/sahmk-python](https://github.com/sahmk-sa/sahmk-python)
 pip install sahmk-mcp
 ```
 
+Requires `sahmk>=0.7.0` for identifier-aware quote resolution (`identifier`/`identifiers`).
+
 ## Security
 
 - Set API keys via environment variables (`SAHMK_API_KEY`).
