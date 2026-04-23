@@ -10,6 +10,7 @@ This MCP exposes a curated set of Sahmk tools for AI agents, so assistants can q
 |------|------------|
 | `get_quote` | Snapshot for one stock identifier (symbol, name, or alias) |
 | `get_quotes` | Compare multiple stock identifiers in one call |
+| `companies_list` | Company directory/symbol discovery with pagination |
 | `get_market_summary` | Summary for `TASI` or `NOMU` |
 | `get_market_movers` | Top movers by `gainers`, `losers`, `volume`, or `value` |
 | `get_sectors` | Sector performance snapshot |
@@ -44,7 +45,7 @@ SDK repo: [sahmk-sa/sahmk-python](https://github.com/sahmk-sa/sahmk-python)
 pip install sahmk-mcp
 ```
 
-Requires `sahmk>=0.7.0` for identifier-aware quote resolution (`identifier`/`identifiers`).
+Requires `sahmk>=0.8.0` for symbol discovery (`companies_list`) and identifier-aware quote resolution (`identifier`/`identifiers`).
 
 ## Security
 
@@ -104,16 +105,39 @@ sahmk-mcp
 - `get_quote.symbol` *(legacy alias)*: accepted for backward compatibility.
 - `get_quotes.identifiers` *(preferred)*: maximum 50 identifiers per request.
 - `get_quotes.symbols` *(legacy alias)*: accepted for backward compatibility.
+- `companies_list.market`: `TASI` or `NOMU` (`NOMUC` alias is accepted and normalized).
+- `companies_list.limit`: integer greater than 0.
+- `companies_list.offset`: integer greater than or equal to 0.
 - `get_historical.interval`: `1d`, `1w`, or `1m`.
 - Ambiguous identifiers raise `AMBIGUOUS_IDENTIFIER` with retry guidance and candidates when available.
 - Invalid identifiers and plan-gated requests return the underlying API error.
 
 ### Tool Call Examples
 
+- Company directory search: `companies_list(search="aramco")`
+- Company directory by market alias normalization: `companies_list(search="acwa", market="NOMUC")`
+- Company directory pagination: `companies_list(search="bank", limit=50, offset=100)`
 - Preferred single quote call: `get_quote(identifier="أرامكو")`
 - Legacy single quote call: `get_quote(symbol="2222")`
 - Preferred batch quote call: `get_quotes(identifiers=["سبكيم", "كيان"])`
 - Legacy batch quote call: `get_quotes(symbols=["2222", "1120"])`
+
+## Company Directory / Symbol Discovery
+
+Use `companies_list` first to reduce invalid-symbol 404s before quote/company calls.
+
+1. Discover candidates by name or symbol fragment:
+   - `companies_list(search="aramco")`
+   - `companies_list(search="2222")`
+2. Optionally scope discovery by market:
+   - `companies_list(search="acwa", market="NOMUC")` (`NOMUC` is normalized to `NOMU`)
+3. Pick a symbol from `results`, then call:
+   - `get_quote(identifier="<symbol>")`
+   - `get_company(identifier="<symbol>")`
+4. For pagination loops, increment `offset` by `limit` until you reach `total`:
+   - `companies_list(search="bank", limit=100, offset=0)`
+   - `companies_list(search="bank", limit=100, offset=100)`
+   - continue until `offset >= total`
 
 ## Example Prompts
 

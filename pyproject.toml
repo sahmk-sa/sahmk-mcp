@@ -1,6 +1,6 @@
 [project]
 name = "sahmk-mcp"
-version = "0.2.3"
+version = "0.3.0"
 description = "Official MCP server for Sahmk — use Saudi market data inside AI agents like Cursor and Claude."
 readme = "README.md"
 license = { text = "MIT" }
@@ -20,7 +20,7 @@ classifiers = [
     "Topic :: Software Development :: Libraries :: Python Modules",
 ]
 dependencies = [
-    "sahmk>=0.7.0",
+    "sahmk>=0.8.0",
     "fastmcp>=2.0.0",
 ]
 

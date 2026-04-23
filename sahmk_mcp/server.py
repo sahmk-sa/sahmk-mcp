@@ -9,7 +9,7 @@ from fastmcp import FastMCP
 from sahmk import SahmkClient, SahmkError
 
 _DATE_RE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
-_MIN_SAHMK_VERSION = (0, 7, 0)
+_MIN_SAHMK_VERSION = (0, 8, 0)
 
 mcp = FastMCP(
     "sahmk",
@@ -59,7 +59,7 @@ def _ensure_sahmk_min_version() -> None:
         return
     min_text = ".".join(str(x) for x in _MIN_SAHMK_VERSION)
     raise SahmkError(
-        f"sahmk>={min_text} is required for identifier-based quote resolution. "
+        f"sahmk>={min_text} is required for symbol discovery and identifier-aware quote resolution. "
         f"Found sahmk=={current}. Run: pip install --upgrade 'sahmk>={min_text}'."
     )
 
@@ -69,6 +69,38 @@ def _validate_date(value: str | None, name: str) -> None:
         raise ValueError(
             f"Invalid {name} format: '{value}'. Expected YYYY-MM-DD (e.g. '2026-01-15')."
         )
+
+
+def _normalize_market(value: str | None, name: str = "market") -> str | None:
+    if value is None:
+        return None
+    if not isinstance(value, str) or not value.strip():
+        raise ValueError(
+            f"Invalid {name}: '{value}'. Must be one of: TASI, NOMU."
+        )
+    normalized = value.strip().upper()
+    if normalized == "NOMUC":
+        normalized = "NOMU"
+    if normalized not in {"TASI", "NOMU"}:
+        raise ValueError(
+            f"Invalid {name}: '{value}'. Must be one of: TASI, NOMU."
+        )
+    return normalized
+
+
+def _validate_limit_offset(limit: int, offset: int) -> None:
+    if not isinstance(limit, int) or limit <= 0:
+        raise ValueError(f"Invalid limit: '{limit}'. Must be a positive integer.")
+    if not isinstance(offset, int) or offset < 0:
+        raise ValueError(
+            f"Invalid offset: '{offset}'. Must be an integer greater than or equal to 0."
+        )
+
+
+def _to_raw_response(value):
+    if hasattr(value, "raw"):
+        return value.raw
+    return value
 
 
 def _extract_error_payload(error: SahmkError) -> dict:
@@ -131,6 +163,12 @@ def _raise_if_ambiguous_identifier(error: SahmkError, value: str) -> None:
     ) from error
 
 
+def _is_ambiguous_identifier_error(error: SahmkError) -> bool:
+    code = (getattr(error, "error_code", "") or "").upper()
+    message = str(error).lower()
+    return "AMBIGU" in code or "ambiguous" in message
+
+
 def _is_unknown_identifier_error(error: SahmkError) -> bool:
     code = (getattr(error, "error_code", "") or "").upper()
     if "NOT_FOUND" in code:
@@ -154,6 +192,112 @@ def _extract_first_quote(raw: dict) -> Optional[dict]:
     if isinstance(first, dict):
         return first
     return None
+
+
+def _extract_not_found_inputs(batch_raw: dict) -> list[str]:
+    resolution = batch_raw.get("resolution")
+    if not isinstance(resolution, dict):
+        return []
+    not_found = resolution.get("not_found")
+    if not isinstance(not_found, list):
+        return []
+    inputs: list[str] = []
+    for item in not_found:
+        if isinstance(item, dict):
+            value = item.get("input")
+            if isinstance(value, str) and value.strip():
+                inputs.append(value.strip())
+        elif isinstance(item, str):
+            text = item.strip()
+            if text:
+                inputs.append(text)
+    return inputs
+
+
+def _merge_recovered_batch_quotes(
+    requested_identifiers: list[str],
+    batch_raw: dict,
+    recovered_quotes: list[dict],
+    recovered_inputs: set[str],
+    recovered_ambiguous: list[dict],
+) -> dict:
+    merged = dict(batch_raw)
+    existing_quotes = merged.get("quotes")
+    if not isinstance(existing_quotes, list):
+        existing_quotes = []
+    quotes = [item for item in existing_quotes if isinstance(item, dict)]
+
+    existing_symbols = {
+        quote.get("symbol")
+        for quote in quotes
+        if isinstance(quote.get("symbol"), str) and quote.get("symbol")
+    }
+    for quote in recovered_quotes:
+        symbol = quote.get("symbol")
+        if isinstance(symbol, str) and symbol in existing_symbols:
+            continue
+        quotes.append(quote)
+        if isinstance(symbol, str):
+            existing_symbols.add(symbol)
+
+    resolution = merged.get("resolution")
+    if not isinstance(resolution, dict):
+        resolution = {}
+    not_found_inputs = set(_extract_not_found_inputs(merged))
+    not_found_inputs -= recovered_inputs
+    ambiguous_inputs = {
+        item.get("input")
+        for item in recovered_ambiguous
+        if isinstance(item, dict) and isinstance(item.get("input"), str)
+    }
+    not_found_inputs -= {x for x in ambiguous_inputs if x}
+
+    existing_ambiguous = resolution.get("ambiguous")
+    if not isinstance(existing_ambiguous, list):
+        existing_ambiguous = []
+    ambiguous = [item for item in existing_ambiguous if isinstance(item, dict)]
+    ambiguous += recovered_ambiguous
+
+    merged["quotes"] = quotes
+    merged["count"] = len(quotes)
+    merged["resolution"] = {
+        "requested_count": len(requested_identifiers),
+        "resolved_count": len(quotes),
+        "ambiguous": ambiguous,
+        "not_found": [{"input": value} for value in sorted(not_found_inputs)],
+    }
+    return merged
+
+
+def _recover_unresolved_batch_quotes(client: SahmkClient, identifiers: list[str], raw: dict) -> dict:
+    not_found_inputs = _extract_not_found_inputs(raw)
+    if not not_found_inputs:
+        return raw
+
+    recovered_quotes: list[dict] = []
+    recovered_inputs: set[str] = set()
+    recovered_ambiguous: list[dict] = []
+    for value in not_found_inputs:
+        if _is_numeric_identifier(value):
+            continue
+        try:
+            resolved = client.quote(value).raw
+            if isinstance(resolved, dict):
+                recovered_quotes.append(resolved)
+                recovered_inputs.add(value)
+        except SahmkError as error:
+            if _is_ambiguous_identifier_error(error):
+                payload = _extract_error_payload(error)
+                candidates = _extract_ambiguity_candidates(payload)
+                recovered_ambiguous.append({"input": value, "candidates": candidates})
+            # Keep unresolved items in not_found for all non-resolved cases.
+            continue
+
+    if not recovered_quotes and not recovered_ambiguous:
+        return raw
+    return _merge_recovered_batch_quotes(
+        identifiers, raw, recovered_quotes, recovered_inputs, recovered_ambiguous
+    )
 
 
 def _resolve_single_identifier(
@@ -298,7 +442,10 @@ def get_quotes(
     normalized_identifiers = _resolve_batch_identifiers(identifiers, symbols)
     client = _get_client()
     try:
-        return client.quotes(normalized_identifiers).raw
+        raw = client.quotes(normalized_identifiers).raw
+        if isinstance(raw, dict):
+            return _recover_unresolved_batch_quotes(client, normalized_identifiers, raw)
+        return raw
     except SahmkError as error:
         joined = ", ".join(normalized_identifiers)
         _raise_if_ambiguous_identifier(error, joined)
@@ -453,6 +600,40 @@ def get_historical(
         ).raw
     except SahmkError as error:
         _raise_if_ambiguous_identifier(error, identifier)
+
+
+@mcp.tool
+def companies_list(
+    search: Annotated[
+        Optional[str],
+        "Optional text search across symbol/company names for discovery.",
+    ] = None,
+    market: Annotated[
+        Optional[str],
+        "Optional market filter: 'TASI' or 'NOMU' (alias 'NOMUC' is accepted and normalized).",
+    ] = None,
+    limit: Annotated[
+        int,
+        "Page size (must be > 0).",
+    ] = 100,
+    offset: Annotated[
+        int,
+        "Pagination offset (must be >= 0).",
+    ] = 0,
+) -> dict:
+    """Discover listed companies and symbols.
+    Use this first to find/validate symbols before quote/company calls."""
+    _validate_limit_offset(limit=limit, offset=offset)
+    normalized_market = _normalize_market(market, name="market")
+    client = _get_client()
+    return _to_raw_response(
+        client.companies(
+            search=search,
+            market=normalized_market,
+            limit=limit,
+            offset=offset,
+        )
+    )
 
 
 def main():
