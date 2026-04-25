@@ -458,13 +458,13 @@ class TestNewCuratedTools(unittest.TestCase):
         client.financials.return_value.raw = {"symbol": "2222", "income_statements": []}
         mock_get_client.return_value = client
 
-        result = server.get_financials("أرامكو")
+        result = server.get_financials(symbol="2222")
 
         self.assertEqual(result["symbol"], "2222")
         self.assertIn("income_statements", result)
         self.assertIn("balance_sheets", result)
         self.assertIn("cash_flows", result)
-        client.financials.assert_called_once_with("أرامكو")
+        client.financials.assert_called_once_with("2222")
 
     @patch("sahmk_mcp.server._get_client")
     def test_get_dividends(self, mock_get_client):
@@ -472,14 +472,14 @@ class TestNewCuratedTools(unittest.TestCase):
         client.dividends.return_value.raw = {"symbol": "2222", "history": []}
         mock_get_client.return_value = client
 
-        result = server.get_dividends("الراجحي")
+        result = server.get_dividends(symbol="1120")
 
         self.assertEqual(result["symbol"], "2222")
         self.assertIn("current_price", result)
         self.assertIn("trailing_12m_yield", result)
         self.assertIn("upcoming", result)
         self.assertIn("history", result)
-        client.dividends.assert_called_once_with("الراجحي")
+        client.dividends.assert_called_once_with("1120")
 
 
 if __name__ == "__main__":

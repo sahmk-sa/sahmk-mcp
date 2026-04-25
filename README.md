@@ -105,6 +105,9 @@ sahmk-mcp
 - `get_quote.symbol` *(legacy alias)*: accepted for backward compatibility.
 - `get_quotes.identifiers` *(preferred)*: maximum 50 identifiers per request.
 - `get_quotes.symbols` *(legacy alias)*: accepted for backward compatibility.
+- `get_financials.symbol`: requires exact exchange symbol.
+- `get_dividends.symbol`: requires exact exchange symbol.
+- `get_historical.symbol`: requires exact exchange symbol.
 - `companies_list.market`: `TASI` or `NOMU` (`NOMUC` alias is accepted and normalized).
 - `companies_list.limit`: integer greater than 0.
 - `companies_list.offset`: integer greater than or equal to 0.
@@ -121,10 +124,13 @@ sahmk-mcp
 - Legacy single quote call: `get_quote(symbol="2222")`
 - Preferred batch quote call: `get_quotes(identifiers=["سبكيم", "كيان"])`
 - Legacy batch quote call: `get_quotes(symbols=["2222", "1120"])`
+- Financials by exact symbol: `get_financials(symbol="1120")`
+- Dividends by exact symbol: `get_dividends(symbol="1120")`
+- Historical by exact symbol: `get_historical(symbol="1120", interval="1d")`
 
 ## Company Directory / Symbol Discovery
 
-Use `companies_list` first to reduce invalid-symbol 404s before quote/company calls.
+Use `companies_list` first to reduce invalid-symbol 404s before symbol-only tools.
 
 1. Discover candidates by name or symbol fragment:
    - `companies_list(search="aramco")`
@@ -133,11 +139,18 @@ Use `companies_list` first to reduce invalid-symbol 404s before quote/company ca
    - `companies_list(search="acwa", market="NOMUC")` (`NOMUC` is normalized to `NOMU`)
 3. Pick a symbol from `results`, then call:
    - `get_quote(identifier="<symbol>")`
-   - `get_company(identifier="<symbol>")`
+   - `get_financials(symbol="<symbol>")`
+   - `get_dividends(symbol="<symbol>")`
+   - `get_historical(symbol="<symbol>")`
 4. For pagination loops, increment `offset` by `limit` until you reach `total`:
    - `companies_list(search="bank", limit=100, offset=0)`
    - `companies_list(search="bank", limit=100, offset=100)`
    - continue until `offset >= total`
+
+### MCP Guidance Examples
+
+- User: "سعر الراجحي" -> call `get_quote(identifier="الراجحي")`.
+- Follow-up: "قوائم الشركة" -> if previous result includes `resolved_instrument.symbol = "1120"`, reuse it and call `get_financials(symbol="1120")`.
 
 ## Example Prompts
 

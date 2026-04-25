@@ -21,7 +21,12 @@ mcp = FastMCP(
         "Use get_quote for a single stock price, get_quotes to compare multiple stocks, "
         "get_market_summary for the overall market (optionally by index), get_market_movers for top gainers/losers/leaders, "
         "get_sectors for sector performance, get_company for company details, get_financials and get_dividends for fundamentals, "
-        "and get_historical for past price data."
+        "and get_historical for past price data. "
+        "For get_financials/get_dividends/get_historical, requires exact exchange symbol. "
+        "If the user provides a company name, first use companies_list. "
+        "If a previous tool result included resolved_instrument.symbol, reuse that symbol. "
+        "Example flow: User says 'سعر الراجحي' -> get_quote(identifier='الراجحي'). "
+        "Follow-up 'قوائم الشركة' -> reuse resolved_instrument.symbol='1120' and call get_financials(symbol='1120')."
     ),
 )
 
@@ -537,43 +542,51 @@ def get_company(
 
 @mcp.tool
 def get_financials(
-    identifier: Annotated[
+    symbol: Annotated[
         str,
-        "Stock identifier (symbol, Arabic/English name, or alias), e.g. '2222', 'أرامكو'.",
+        "Requires exact exchange symbol. If the user provides a company name, first use companies_list. "
+        "If a previous tool result included resolved_instrument.symbol, reuse that symbol. "
+        "Example: '1120'.",
     ],
 ) -> dict:
     """Get company financial statements and key financial data.
-    Use this for income statement, balance sheet, and cash flow requests."""
+    Use this for income statement, balance sheet, and cash flow requests.
+    Requires exact exchange symbol."""
     client = _get_client()
     try:
-        raw = client.financials(identifier).raw
+        raw = client.financials(symbol).raw
     except SahmkError as error:
-        _raise_if_ambiguous_identifier(error, identifier)
+        _raise_if_ambiguous_identifier(error, symbol)
     return _normalize_financials_response(raw)
 
 
 @mcp.tool
 def get_dividends(
-    identifier: Annotated[
+    symbol: Annotated[
         str,
-        "Stock identifier (symbol, Arabic/English name, or alias), e.g. '2222', 'أرامكو'.",
+        "Requires exact exchange symbol. If the user provides a company name, first use companies_list. "
+        "If a previous tool result included resolved_instrument.symbol, reuse that symbol. "
+        "Example: '1120'.",
     ],
 ) -> dict:
     """Get company dividend history and yield data.
-    Use this when the user asks for dividends or payout history."""
+    Use this when the user asks for dividends or payout history.
+    Requires exact exchange symbol."""
     client = _get_client()
     try:
-        raw = client.dividends(identifier).raw
+        raw = client.dividends(symbol).raw
     except SahmkError as error:
-        _raise_if_ambiguous_identifier(error, identifier)
+        _raise_if_ambiguous_identifier(error, symbol)
     return _normalize_dividends_response(raw)
 
 
 @mcp.tool
 def get_historical(
-    identifier: Annotated[
+    symbol: Annotated[
         str,
-        "Stock identifier (symbol, Arabic/English name, or alias), e.g. '2222', 'الراجحي'.",
+        "Requires exact exchange symbol. If the user provides a company name, first use companies_list. "
+        "If a previous tool result included resolved_instrument.symbol, reuse that symbol. "
+        "Example: '1120'.",
     ],
     from_date: Annotated[
         Optional[str], "Start date in YYYY-MM-DD format (default: 30 days ago)"
@@ -596,10 +609,10 @@ def get_historical(
     client = _get_client()
     try:
         return client.historical(
-            identifier, from_date=from_date, to_date=to_date, interval=interval
+            symbol, from_date=from_date, to_date=to_date, interval=interval
         ).raw
     except SahmkError as error:
-        _raise_if_ambiguous_identifier(error, identifier)
+        _raise_if_ambiguous_identifier(error, symbol)
 
 
 @mcp.tool
