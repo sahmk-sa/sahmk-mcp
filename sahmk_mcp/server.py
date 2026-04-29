@@ -9,7 +9,7 @@ from fastmcp import FastMCP
 from sahmk import SahmkClient, SahmkError
 
 _DATE_RE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
-_MIN_SAHMK_VERSION = (0, 9, 1)
+_MIN_SAHMK_VERSION = (0, 9, 2)
 
 mcp = FastMCP(
     "sahmk",
@@ -375,6 +375,8 @@ def _normalize_sectors_response(raw: dict) -> dict:
 
 def _normalize_financials_response(raw: dict) -> dict:
     normalized = dict(raw)
+    # Financial statements endpoint is contractually block-focused and does not expose meta.
+    normalized.pop("meta", None)
     normalized.setdefault("symbol", None)
     normalized.setdefault("income_statements", [])
     normalized.setdefault("balance_sheets", [])
@@ -394,11 +396,21 @@ def _normalize_dividends_response(raw: dict) -> dict:
     return normalized
 
 
+def _normalize_analytics_meta(raw_meta) -> dict:
+    if not isinstance(raw_meta, dict):
+        return {}
+    normalized_meta: dict = {}
+    for key in ("period", "metrics", "warnings"):
+        if key in raw_meta:
+            normalized_meta[key] = raw_meta[key]
+    return normalized_meta
+
+
 def _normalize_ratios_response(raw: dict) -> dict:
     normalized = dict(raw)
     normalized.setdefault("symbol", None)
     normalized.setdefault("ratios", {})
-    normalized.setdefault("meta", {})
+    normalized["meta"] = _normalize_analytics_meta(normalized.get("meta"))
     return normalized
 
 
@@ -410,7 +422,7 @@ def _normalize_compare_response(raw: dict) -> dict:
     normalized["results"] = results
     if not isinstance(normalized.get("count"), int):
         normalized["count"] = len(results)
-    normalized.setdefault("meta", {})
+    normalized["meta"] = _normalize_analytics_meta(normalized.get("meta"))
     return normalized
 
 

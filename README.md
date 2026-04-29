@@ -47,7 +47,7 @@ SDK repo: [sahmk-sa/sahmk-python](https://github.com/sahmk-sa/sahmk-python)
 pip install sahmk-mcp
 ```
 
-Requires `sahmk>=0.9.1` for symbol discovery (`companies_list`) and identifier-aware quote resolution (`identifier`/`identifiers`).
+Requires `sahmk>=0.9.2` for symbol discovery (`companies_list`) and identifier-aware quote resolution (`identifier`/`identifiers`).
 
 ## Security
 
@@ -110,12 +110,15 @@ sahmk-mcp
 - `get_financials.symbol`: requires exact exchange symbol.
 - `get_financials.period` and `get_financials.statement_period`: if both are provided, `period` takes precedence.
 - `get_financials` supports optional passthrough params: `type`, `period`, `statement_period`, `history`, `metrics`, `result`, `include_quality`, and `include_partial`.
+- `get_financials` response is statement-block focused and does not include `meta`.
 - `get_ratios.symbol`: requires exact exchange symbol.
 - `get_ratios.history`: defaults to `latest`.
 - `get_ratios.period`: defaults to `annual`.
 - `get_ratios.metrics`: defaults to `core`.
 - `compare_symbols.symbols`: list of symbols (preferred) or comma-separated string.
 - `compare_symbols.metrics`: defaults to `core`.
+- `get_ratios` and `compare_symbols` include minimal `meta` only: `period`, `metrics`, `warnings`.
+- Analytics tools do not expose backend/internal fields such as `applied_profile`, `plan`, or source diagnostics.
 - `get_dividends.symbol`: requires exact exchange symbol.
 - `get_historical.symbol`: requires exact exchange symbol.
 - `companies_list.market`: `TASI` or `NOMU` (`NOMUC` alias is accepted and normalized).
@@ -183,6 +186,7 @@ Note: `get_financials` and `get_dividends` require Sahmk API access on Starter o
 
 ## Release Notes
 
+- `0.4.3`: Align MCP output contract: no financials `meta`; analytics `meta` is limited to `period`, `metrics`, and `warnings`.
 - `0.4.2`: Add SDK method-name compatibility fallback for analytics (`get_ratios`/`ratios`, `compare_symbols`/`compare`).
 - `0.4.1`: Require `sahmk>=0.9.1` in package dependency and runtime version guard.
 - `0.4.0`: Add analytics ratios and compare tools; enhance financials optional parameters.

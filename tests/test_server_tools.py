@@ -161,14 +161,14 @@ class TestNewCuratedTools(unittest.TestCase):
         self.assertEqual(result, expected)
 
     def test_ensure_sahmk_min_version_allows_supported_version(self):
-        with patch("sahmk.__version__", "0.9.1"):
+        with patch("sahmk.__version__", "0.9.2"):
             server._ensure_sahmk_min_version()
 
     def test_ensure_sahmk_min_version_blocks_old_version(self):
-        with patch("sahmk.__version__", "0.9.0"):
+        with patch("sahmk.__version__", "0.9.1"):
             with self.assertRaisesRegex(
                 SahmkError,
-                r"sahmk>=0\.9\.1 is required for symbol discovery and identifier-aware quote resolution",
+                r"sahmk>=0\.9\.2 is required for symbol discovery and identifier-aware quote resolution",
             ):
                 server._ensure_sahmk_min_version()
 
@@ -464,7 +464,22 @@ class TestNewCuratedTools(unittest.TestCase):
         self.assertIn("income_statements", result)
         self.assertIn("balance_sheets", result)
         self.assertIn("cash_flows", result)
+        self.assertNotIn("meta", result)
         client.financials.assert_called_once_with("2222")
+
+    @patch("sahmk_mcp.server._get_client")
+    def test_get_financials_strips_meta_if_backend_returns_it(self, mock_get_client):
+        client = MagicMock()
+        client.financials.return_value.raw = {
+            "symbol": "2222",
+            "income_statements": [],
+            "meta": {"period": "quarterly"},
+        }
+        mock_get_client.return_value = client
+
+        result = server.get_financials(symbol="2222")
+
+        self.assertNotIn("meta", result)
 
     @patch("sahmk_mcp.server._get_client")
     def test_get_financials_optional_params_passthrough_period_precedence(
@@ -513,6 +528,30 @@ class TestNewCuratedTools(unittest.TestCase):
             history="latest",
             period="annual",
             metrics="core",
+        )
+
+    @patch("sahmk_mcp.server._get_client")
+    def test_get_ratios_filters_meta_to_customer_facing_fields(self, mock_get_client):
+        client = MagicMock()
+        client.get_ratios.return_value.raw = {
+            "symbol": "1120",
+            "ratios": [],
+            "meta": {
+                "period": "annual",
+                "metrics": "core",
+                "warnings": [],
+                "applied_profile": "internal_profile",
+                "plan": "pro",
+                "source": "debug",
+            },
+        }
+        mock_get_client.return_value = client
+
+        result = server.get_ratios(symbol="1120")
+
+        self.assertEqual(
+            result["meta"],
+            {"period": "annual", "metrics": "core", "warnings": []},
         )
 
     @patch("sahmk_mcp.server._get_client")
@@ -569,6 +608,34 @@ class TestNewCuratedTools(unittest.TestCase):
         client.compare_symbols.assert_called_once_with(
             ["1120", "1180", "1010"],
             metrics="core",
+        )
+
+    @patch("sahmk_mcp.server._get_client")
+    def test_compare_symbols_filters_meta_to_customer_facing_fields(self, mock_get_client):
+        client = MagicMock()
+        client.compare_symbols.return_value.raw = {
+            "results": [{"symbol": "1120"}],
+            "count": 1,
+            "meta": {
+                "period": "quarterly",
+                "metrics": "extended",
+                "warnings": ["limited_history"],
+                "applied_profile": "internal_profile",
+                "plan": "pro",
+                "source": {"trace_id": "123"},
+            },
+        }
+        mock_get_client.return_value = client
+
+        result = server.compare_symbols(symbols=["1120"])
+
+        self.assertEqual(
+            result["meta"],
+            {
+                "period": "quarterly",
+                "metrics": "extended",
+                "warnings": ["limited_history"],
+            },
         )
 
     @patch("sahmk_mcp.server._get_client")
