@@ -16,6 +16,8 @@ This MCP exposes a curated set of Sahmk tools for AI agents, so assistants can q
 | `get_sectors` | Sector performance snapshot |
 | `get_company` | Company profile and fundamentals |
 | `get_financials` | Financial statements *(Starter+ plan)* |
+| `get_ratios` | Calculated financial ratios *(Starter/Pro features vary)* |
+| `compare_symbols` | Multi-symbol normalized ratio/metrics comparison *(Starter/Pro limits vary)* |
 | `get_dividends` | Dividend history and yield data *(Starter+ plan)* |
 | `get_historical` | Historical OHLCV data |
 
@@ -106,6 +108,14 @@ sahmk-mcp
 - `get_quotes.identifiers` *(preferred)*: maximum 50 identifiers per request.
 - `get_quotes.symbols` *(legacy alias)*: accepted for backward compatibility.
 - `get_financials.symbol`: requires exact exchange symbol.
+- `get_financials.period` and `get_financials.statement_period`: if both are provided, `period` takes precedence.
+- `get_financials` supports optional passthrough params: `type`, `period`, `statement_period`, `history`, `metrics`, `result`, `include_quality`, and `include_partial`.
+- `get_ratios.symbol`: requires exact exchange symbol.
+- `get_ratios.history`: defaults to `latest`.
+- `get_ratios.period`: defaults to `annual`.
+- `get_ratios.metrics`: defaults to `core`.
+- `compare_symbols.symbols`: list of symbols (preferred) or comma-separated string.
+- `compare_symbols.metrics`: defaults to `core`.
 - `get_dividends.symbol`: requires exact exchange symbol.
 - `get_historical.symbol`: requires exact exchange symbol.
 - `companies_list.market`: `TASI` or `NOMU` (`NOMUC` alias is accepted and normalized).
@@ -125,6 +135,10 @@ sahmk-mcp
 - Preferred batch quote call: `get_quotes(identifiers=["سبكيم", "كيان"])`
 - Legacy batch quote call: `get_quotes(symbols=["2222", "1120"])`
 - Financials by exact symbol: `get_financials(symbol="1120")`
+- Financial ratios defaults: `get_ratios(symbol="1120")`
+- Financial ratios advanced: `get_ratios(symbol="1120", history="5y", period="quarterly", metrics="extended")`
+- Compare symbols defaults: `compare_symbols(symbols=["1120", "1180", "1010"])`
+- Compare symbols extended: `compare_symbols(symbols=["1120", "1180", "1010", "2222"], metrics="extended")`
 - Dividends by exact symbol: `get_dividends(symbol="1120")`
 - Historical by exact symbol: `get_historical(symbol="1120", interval="1d")`
 
@@ -166,6 +180,10 @@ Use `companies_list` first to reduce invalid-symbol 404s before symbol-only tool
 - "Tell me about الراجحي and its sector."
 
 Note: `get_financials` and `get_dividends` require Sahmk API access on Starter or higher. If unavailable for the current key, the MCP returns the underlying API error.
+
+## Release Notes
+
+- `0.4.0`: Add analytics ratios and compare tools; enhance financials optional parameters.
 
 ## License
 

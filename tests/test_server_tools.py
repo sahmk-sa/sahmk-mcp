@@ -467,6 +467,162 @@ class TestNewCuratedTools(unittest.TestCase):
         client.financials.assert_called_once_with("2222")
 
     @patch("sahmk_mcp.server._get_client")
+    def test_get_financials_optional_params_passthrough_period_precedence(
+        self, mock_get_client
+    ):
+        client = MagicMock()
+        client.financials.return_value.raw = {"symbol": "1120"}
+        mock_get_client.return_value = client
+
+        server.get_financials(
+            symbol="1120",
+            type="statements",
+            period="quarterly",
+            statement_period="annual",
+            history="5y",
+            metrics="extended",
+            result="raw",
+            include_quality=True,
+            include_partial=False,
+        )
+
+        client.financials.assert_called_once_with(
+            "1120",
+            type="statements",
+            statement_period="quarterly",
+            history="5y",
+            metrics="extended",
+            result="raw",
+            include_quality=True,
+            include_partial=False,
+        )
+
+    @patch("sahmk_mcp.server._get_client")
+    def test_get_ratios_defaults(self, mock_get_client):
+        client = MagicMock()
+        client.get_ratios.return_value.raw = {"symbol": "1120", "ratios": {"roe": 0.15}}
+        mock_get_client.return_value = client
+
+        result = server.get_ratios(symbol="1120")
+
+        self.assertEqual(result["symbol"], "1120")
+        self.assertIn("ratios", result)
+        self.assertIn("meta", result)
+        client.get_ratios.assert_called_once_with(
+            "1120",
+            history="latest",
+            period="annual",
+            metrics="core",
+        )
+
+    @patch("sahmk_mcp.server._get_client")
+    def test_get_ratios_params(self, mock_get_client):
+        client = MagicMock()
+        client.get_ratios.return_value.raw = {"symbol": "1120", "ratios": {}, "meta": {}}
+        mock_get_client.return_value = client
+
+        server.get_ratios(
+            symbol="1120",
+            history="5y",
+            period="quarterly",
+            metrics="extended",
+        )
+
+        client.get_ratios.assert_called_once_with(
+            "1120",
+            history="5y",
+            period="quarterly",
+            metrics="extended",
+        )
+
+    @patch("sahmk_mcp.server._get_client")
+    def test_compare_symbols_list_symbols(self, mock_get_client):
+        client = MagicMock()
+        client.compare_symbols.return_value.raw = {
+            "results": [{"symbol": "1120"}, {"symbol": "1180"}],
+            "count": 2,
+        }
+        mock_get_client.return_value = client
+
+        result = server.compare_symbols(symbols=["1120", "1180", "1010"])
+
+        self.assertEqual(result["count"], 2)
+        self.assertIn("results", result)
+        self.assertIn("meta", result)
+        client.compare_symbols.assert_called_once_with(
+            ["1120", "1180", "1010"],
+            metrics="core",
+        )
+
+    @patch("sahmk_mcp.server._get_client")
+    def test_compare_symbols_comma_string_symbols(self, mock_get_client):
+        client = MagicMock()
+        client.compare_symbols.return_value.raw = {
+            "results": [{"symbol": "1120"}, {"symbol": "1180"}, {"symbol": "1010"}],
+            "count": 3,
+        }
+        mock_get_client.return_value = client
+
+        server.compare_symbols(symbols="1120, 1180,1010")
+
+        client.compare_symbols.assert_called_once_with(
+            ["1120", "1180", "1010"],
+            metrics="core",
+        )
+
+    @patch("sahmk_mcp.server._get_client")
+    def test_get_ratios_dynamic_ratio_keys_do_not_crash(self, mock_get_client):
+        client = MagicMock()
+        client.get_ratios.return_value.raw = {
+            "symbol": "1120",
+            "ratios": {
+                "operating_margin": 0.24,
+                "banking_specific_coverage": 1.8,
+                "custom_sector_key_v2": {"trend": [1.1, 1.2]},
+            },
+        }
+        mock_get_client.return_value = client
+
+        result = server.get_ratios(symbol="1120")
+
+        self.assertEqual(result["ratios"]["banking_specific_coverage"], 1.8)
+        self.assertIn("custom_sector_key_v2", result["ratios"])
+
+    @patch("sahmk_mcp.server._get_client")
+    def test_analytics_plan_limit_error_passthrough(self, mock_get_client):
+        client = MagicMock()
+        plan_limit_error = SahmkError(
+            "API error 402: plan limit exceeded",
+            status_code=402,
+            error_code="PLAN_LIMIT",
+        )
+        client.get_ratios.side_effect = plan_limit_error
+        mock_get_client.return_value = client
+
+        with self.assertRaises(SahmkError) as ctx:
+            server.get_ratios(symbol="1120")
+
+        self.assertEqual(ctx.exception.status_code, 402)
+        self.assertEqual(ctx.exception.error_code, "PLAN_LIMIT")
+
+    @patch("sahmk_mcp.server._get_client")
+    def test_compare_symbols_error_passthrough(self, mock_get_client):
+        client = MagicMock()
+        api_error = SahmkError(
+            "API error 400: invalid metrics",
+            status_code=400,
+            error_code="INVALID_PARAM",
+        )
+        client.compare_symbols.side_effect = api_error
+        mock_get_client.return_value = client
+
+        with self.assertRaises(SahmkError) as ctx:
+            server.compare_symbols(symbols=["1120", "1180"], metrics="bad")
+
+        self.assertEqual(ctx.exception.status_code, 400)
+        self.assertEqual(ctx.exception.error_code, "INVALID_PARAM")
+
+    @patch("sahmk_mcp.server._get_client")
     def test_get_dividends(self, mock_get_client):
         client = MagicMock()
         client.dividends.return_value.raw = {"symbol": "2222", "history": []}

@@ -394,6 +394,51 @@ def _normalize_dividends_response(raw: dict) -> dict:
     return normalized
 
 
+def _normalize_ratios_response(raw: dict) -> dict:
+    normalized = dict(raw)
+    normalized.setdefault("symbol", None)
+    normalized.setdefault("ratios", {})
+    normalized.setdefault("meta", {})
+    return normalized
+
+
+def _normalize_compare_response(raw: dict) -> dict:
+    normalized = dict(raw)
+    results = normalized.get("results")
+    if not isinstance(results, list):
+        results = []
+    normalized["results"] = results
+    if not isinstance(normalized.get("count"), int):
+        normalized["count"] = len(results)
+    normalized.setdefault("meta", {})
+    return normalized
+
+
+def _normalize_symbol_list_input(symbols: list[str] | str) -> list[str]:
+    if isinstance(symbols, str):
+        items = [part.strip() for part in symbols.split(",")]
+        normalized = [item for item in items if item]
+    elif isinstance(symbols, list):
+        normalized = []
+        for item in symbols:
+            if not isinstance(item, str):
+                raise ValueError(
+                    "Invalid symbols: list entries must be strings or a comma-separated string."
+                )
+            stripped = item.strip()
+            if stripped:
+                normalized.append(stripped)
+    else:
+        raise ValueError(
+            "Invalid symbols: provide a list of symbols or a comma-separated string."
+        )
+    if not normalized:
+        raise ValueError(
+            "At least one symbol is required. Provide a list or comma-separated symbols."
+        )
+    return normalized
+
+
 @mcp.tool
 def get_quote(
     identifier: Annotated[
@@ -548,16 +593,122 @@ def get_financials(
         "If a previous tool result included resolved_instrument.symbol, reuse that symbol. "
         "Example: '1120'.",
     ],
+    type: Annotated[
+        Optional[str],
+        "Optional financial view selector (e.g. statement family/profile returned by backend).",
+    ] = None,
+    period: Annotated[
+        Optional[str],
+        "Optional period selector. If both period and statement_period are provided, period takes precedence.",
+    ] = None,
+    statement_period: Annotated[
+        Optional[str],
+        "Optional explicit statement period selector. Ignored when period is provided.",
+    ] = None,
+    history: Annotated[
+        Optional[str],
+        "Optional history window selector.",
+    ] = None,
+    metrics: Annotated[
+        Optional[str],
+        "Optional metrics profile selector.",
+    ] = None,
+    result: Annotated[
+        Optional[str],
+        "Optional result shaping selector.",
+    ] = None,
+    include_quality: Annotated[
+        Optional[bool],
+        "Optionally include quality indicators in response payload.",
+    ] = None,
+    include_partial: Annotated[
+        Optional[bool],
+        "Optionally include partial/incomplete statement periods when available.",
+    ] = None,
 ) -> dict:
     """Get company financial statements and key financial data.
     Use this for income statement, balance sheet, and cash flow requests.
     Requires exact exchange symbol."""
     client = _get_client()
+    effective_statement_period = (
+        period if period is not None else statement_period
+    )
+    financials_kwargs: dict = {}
+    if type is not None:
+        financials_kwargs["type"] = type
+    if effective_statement_period is not None:
+        financials_kwargs["statement_period"] = effective_statement_period
+    if history is not None:
+        financials_kwargs["history"] = history
+    if metrics is not None:
+        financials_kwargs["metrics"] = metrics
+    if result is not None:
+        financials_kwargs["result"] = result
+    if include_quality is not None:
+        financials_kwargs["include_quality"] = include_quality
+    if include_partial is not None:
+        financials_kwargs["include_partial"] = include_partial
     try:
-        raw = client.financials(symbol).raw
+        raw = _to_raw_response(client.financials(symbol, **financials_kwargs))
     except SahmkError as error:
         _raise_if_ambiguous_identifier(error, symbol)
     return _normalize_financials_response(raw)
+
+
+@mcp.tool
+def get_ratios(
+    symbol: Annotated[
+        str,
+        "Requires exact exchange symbol. If the user provides a company name, first use companies_list. "
+        "If a previous tool result included resolved_instrument.symbol, reuse that symbol. "
+        "Example: '1120'.",
+    ],
+    history: Annotated[
+        str,
+        "History window for ratios. Default 'latest'.",
+    ] = "latest",
+    period: Annotated[
+        str,
+        "Statement period for ratios, e.g. 'annual' or 'quarterly'. Default 'annual'.",
+    ] = "annual",
+    metrics: Annotated[
+        str,
+        "Metrics profile, e.g. 'core' or 'extended'. Default 'core'.",
+    ] = "core",
+) -> dict:
+    """Get calculated financial ratios for one Saudi-listed company. Starter returns latest annual core ratios; Pro supports history, quarterly, and extended metrics."""
+    client = _get_client()
+    try:
+        raw = _to_raw_response(
+            client.get_ratios(
+                symbol,
+                history=history,
+                period=period,
+                metrics=metrics,
+            )
+        )
+    except SahmkError as error:
+        _raise_if_ambiguous_identifier(error, symbol)
+    return _normalize_ratios_response(raw)
+
+
+@mcp.tool
+def compare_symbols(
+    symbols: Annotated[
+        list[str] | str,
+        "Symbols to compare as a list (preferred) or comma-separated string. "
+        "Starter supports up to 3 symbols; Pro supports up to 10.",
+    ],
+    metrics: Annotated[
+        str,
+        "Metrics profile, e.g. 'core' or 'extended'. Default 'core'.",
+    ] = "core",
+) -> dict:
+    """Compare multiple Saudi-listed companies using normalized financial ratios and key metrics. Starter supports up to 3 symbols; Pro supports up to 10."""
+    normalized_symbols = _normalize_symbol_list_input(symbols)
+    client = _get_client()
+    raw = _to_raw_response(client.compare_symbols(normalized_symbols, metrics=metrics))
+    return _normalize_compare_response(raw)
 
 
 @mcp.tool
