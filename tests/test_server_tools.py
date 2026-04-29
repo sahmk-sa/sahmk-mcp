@@ -161,14 +161,14 @@ class TestNewCuratedTools(unittest.TestCase):
         self.assertEqual(result, expected)
 
     def test_ensure_sahmk_min_version_allows_supported_version(self):
-        with patch("sahmk.__version__", "0.8.0"):
+        with patch("sahmk.__version__", "0.9.1"):
             server._ensure_sahmk_min_version()
 
     def test_ensure_sahmk_min_version_blocks_old_version(self):
-        with patch("sahmk.__version__", "0.7.9"):
+        with patch("sahmk.__version__", "0.9.0"):
             with self.assertRaisesRegex(
                 SahmkError,
-                r"sahmk>=0\.8\.0 is required for symbol discovery and identifier-aware quote resolution",
+                r"sahmk>=0\.9\.1 is required for symbol discovery and identifier-aware quote resolution",
             ):
                 server._ensure_sahmk_min_version()
 

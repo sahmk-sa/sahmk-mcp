@@ -47,7 +47,7 @@ SDK repo: [sahmk-sa/sahmk-python](https://github.com/sahmk-sa/sahmk-python)
 pip install sahmk-mcp
 ```
 
-Requires `sahmk>=0.8.0` for symbol discovery (`companies_list`) and identifier-aware quote resolution (`identifier`/`identifiers`).
+Requires `sahmk>=0.9.1` for symbol discovery (`companies_list`) and identifier-aware quote resolution (`identifier`/`identifiers`).
 
 ## Security
 
@@ -183,6 +183,7 @@ Note: `get_financials` and `get_dividends` require Sahmk API access on Starter o
 
 ## Release Notes
 
+- `0.4.1`: Require `sahmk>=0.9.1` in package dependency and runtime version guard.
 - `0.4.0`: Add analytics ratios and compare tools; enhance financials optional parameters.
 
 ## License

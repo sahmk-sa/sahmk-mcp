@@ -9,7 +9,7 @@ from fastmcp import FastMCP
 from sahmk import SahmkClient, SahmkError
 
 _DATE_RE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
-_MIN_SAHMK_VERSION = (0, 8, 0)
+_MIN_SAHMK_VERSION = (0, 9, 1)
 
 mcp = FastMCP(
     "sahmk",
