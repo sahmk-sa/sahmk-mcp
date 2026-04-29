@@ -439,6 +439,18 @@ def _normalize_symbol_list_input(symbols: list[str] | str) -> list[str]:
     return normalized
 
 
+def _call_sdk_with_fallback(client: SahmkClient, primary: str, fallback: str, *args, **kwargs):
+    method = getattr(client, primary, None)
+    if method is None:
+        method = getattr(client, fallback, None)
+    if method is None:
+        raise AttributeError(
+            f"SahmkClient has neither '{primary}' nor '{fallback}'. "
+            "Upgrade sahmk SDK to a compatible version."
+        )
+    return method(*args, **kwargs)
+
+
 @mcp.tool
 def get_quote(
     identifier: Annotated[
@@ -680,7 +692,10 @@ def get_ratios(
     client = _get_client()
     try:
         raw = _to_raw_response(
-            client.get_ratios(
+            _call_sdk_with_fallback(
+                client,
+                "get_ratios",
+                "ratios",
                 symbol,
                 history=history,
                 period=period,
@@ -707,7 +722,15 @@ def compare_symbols(
     """Compare multiple Saudi-listed companies using normalized financial ratios and key metrics. Starter supports up to 3 symbols; Pro supports up to 10."""
     normalized_symbols = _normalize_symbol_list_input(symbols)
     client = _get_client()
-    raw = _to_raw_response(client.compare_symbols(normalized_symbols, metrics=metrics))
+    raw = _to_raw_response(
+        _call_sdk_with_fallback(
+            client,
+            "compare_symbols",
+            "compare",
+            normalized_symbols,
+            metrics=metrics,
+        )
+    )
     return _normalize_compare_response(raw)
 
 

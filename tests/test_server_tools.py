@@ -536,6 +536,23 @@ class TestNewCuratedTools(unittest.TestCase):
         )
 
     @patch("sahmk_mcp.server._get_client")
+    def test_get_ratios_falls_back_to_ratios_method(self, mock_get_client):
+        client = MagicMock()
+        del client.get_ratios
+        client.ratios.return_value.raw = {"symbol": "1120", "ratios": [], "meta": {}}
+        mock_get_client.return_value = client
+
+        result = server.get_ratios(symbol="1120")
+
+        self.assertEqual(result["symbol"], "1120")
+        client.ratios.assert_called_once_with(
+            "1120",
+            history="latest",
+            period="annual",
+            metrics="core",
+        )
+
+    @patch("sahmk_mcp.server._get_client")
     def test_compare_symbols_list_symbols(self, mock_get_client):
         client = MagicMock()
         client.compare_symbols.return_value.raw = {
@@ -569,6 +586,21 @@ class TestNewCuratedTools(unittest.TestCase):
             ["1120", "1180", "1010"],
             metrics="core",
         )
+
+    @patch("sahmk_mcp.server._get_client")
+    def test_compare_symbols_falls_back_to_compare_method(self, mock_get_client):
+        client = MagicMock()
+        del client.compare_symbols
+        client.compare.return_value.raw = {
+            "results": [{"symbol": "1120"}, {"symbol": "1180"}],
+            "count": 2,
+        }
+        mock_get_client.return_value = client
+
+        result = server.compare_symbols(symbols=["1120", "1180"])
+
+        self.assertEqual(result["count"], 2)
+        client.compare.assert_called_once_with(["1120", "1180"], metrics="core")
 
     @patch("sahmk_mcp.server._get_client")
     def test_get_ratios_dynamic_ratio_keys_do_not_crash(self, mock_get_client):

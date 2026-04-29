@@ -183,6 +183,7 @@ Note: `get_financials` and `get_dividends` require Sahmk API access on Starter o
 
 ## Release Notes
 
+- `0.4.2`: Add SDK method-name compatibility fallback for analytics (`get_ratios`/`ratios`, `compare_symbols`/`compare`).
 - `0.4.1`: Require `sahmk>=0.9.1` in package dependency and runtime version guard.
 - `0.4.0`: Add analytics ratios and compare tools; enhance financials optional parameters.
 
