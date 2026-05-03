@@ -1,5 +1,9 @@
 # sahmk-mcp
 
+![Official Source](https://img.shields.io/badge/Source-Official%20Only-0A66C2?style=for-the-badge)
+
+> **Official distribution:** GitHub (sahmk-sa) and PyPI only. Do not download binaries from third-party forks.
+
 Official MCP server for [Sahmk](https://sahmk.sa/developers) — use Saudi market data inside AI agents such as Cursor and Claude Desktop.
 
 This MCP exposes a curated set of Sahmk tools for AI agents, so assistants can query the Saudi market in natural language.
@@ -186,6 +190,7 @@ Note: `get_financials` and `get_dividends` require Sahmk API access on Starter o
 
 ## Release Notes
 
+- `0.4.4`: docs: clarify official distribution channels (GitHub + PyPI only)
 - `0.4.3`: Align MCP output contract: no financials `meta`; analytics `meta` is limited to `period`, `metrics`, and `warnings`.
 - `0.4.2`: Add SDK method-name compatibility fallback for analytics (`get_ratios`/`ratios`, `compare_symbols`/`compare`).
 - `0.4.1`: Require `sahmk>=0.9.1` in package dependency and runtime version guard.
