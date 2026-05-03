@@ -1,6 +1,6 @@
 # sahmk-mcp
 
-![Official Source](https://img.shields.io/badge/Source-Official%20Only-0A66C2?style=for-the-badge)
+[![Official Source](https://img.shields.io/badge/Source-Official%20Only-0A66C2?style=for-the-badge)](https://github.com/sahmk-sa/sahmk-mcp)
 
 > **Official distribution:** GitHub (sahmk-sa) and PyPI only. Do not download binaries from third-party forks.
 
