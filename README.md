@@ -148,7 +148,9 @@ sahmk-mcp
 - Compare symbols extended: `compare_symbols(symbols=["1120", "1180", "1010", "2222"], metrics="extended")`
 - Dividends by exact symbol: `get_dividends(symbol="1120")`
 - Historical by exact symbol: `get_historical(symbol="1120", interval="1d")`
+- Historical with explicit daily date range args: `get_historical(symbol="1120", from_date="2026-01-01", to_date="2026-03-31", interval="1d")`
 - Intraday historical by exact symbol (plan-gated by API key): `get_historical(symbol="1120", interval="60m")`
+- Intraday historical with explicit date range args: `get_historical(symbol="1120", from_date="2026-05-01", to_date="2026-05-31", interval="60m")`
 
 ## Company Directory / Symbol Discovery
 
