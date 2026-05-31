@@ -9,7 +9,8 @@ from fastmcp import FastMCP
 from sahmk import SahmkClient, SahmkError
 
 _DATE_RE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
-_MIN_SAHMK_VERSION = (0, 9, 2)
+_MIN_SAHMK_VERSION = (0, 11, 0)
+_HISTORICAL_INTERVALS = ("1d", "1w", "1m", "30m", "60m")
 
 mcp = FastMCP(
     "sahmk",
@@ -64,7 +65,7 @@ def _ensure_sahmk_min_version() -> None:
         return
     min_text = ".".join(str(x) for x in _MIN_SAHMK_VERSION)
     raise SahmkError(
-        f"sahmk>={min_text} is required for symbol discovery and identifier-aware quote resolution. "
+        f"sahmk>={min_text} is required for MCP-SDK compatibility. "
         f"Found sahmk=={current}. Run: pip install --upgrade 'sahmk>={min_text}'."
     )
 
@@ -781,16 +782,19 @@ def get_historical(
         Optional[str], "End date in YYYY-MM-DD format (default: today)"
     ] = None,
     interval: Annotated[
-        Optional[str], "'1d' for daily, '1w' for weekly, or '1m' for monthly (default: '1d')"
+        Optional[str],
+        "'1d' for daily, '1w' for weekly, '1m' for monthly, '30m' for 30-minute, or "
+        "'60m' for 60-minute bars (default: '1d')",
     ] = None,
 ) -> dict:
     """Get historical OHLCV price data for a Saudi stock over a date range.
     Use this when the user asks for past prices, price trends, or chart-style historical data."""
     _validate_date(from_date, "from_date")
     _validate_date(to_date, "to_date")
-    if interval and interval not in ("1d", "1w", "1m"):
+    if interval and interval not in _HISTORICAL_INTERVALS:
         raise ValueError(
-            f"Invalid interval: '{interval}'. Must be '1d' (daily), '1w' (weekly), or '1m' (monthly)."
+            f"Invalid interval: '{interval}'. Must be one of: "
+            "'1d' (daily), '1w' (weekly), '1m' (monthly), '30m' (30-minute), or '60m' (60-minute)."
         )
     client = _get_client()
     try:

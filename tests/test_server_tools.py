@@ -161,14 +161,14 @@ class TestNewCuratedTools(unittest.TestCase):
         self.assertEqual(result, expected)
 
     def test_ensure_sahmk_min_version_allows_supported_version(self):
-        with patch("sahmk.__version__", "0.9.2"):
+        with patch("sahmk.__version__", "0.11.0"):
             server._ensure_sahmk_min_version()
 
     def test_ensure_sahmk_min_version_blocks_old_version(self):
-        with patch("sahmk.__version__", "0.9.1"):
+        with patch("sahmk.__version__", "0.10.9"):
             with self.assertRaisesRegex(
                 SahmkError,
-                r"sahmk>=0\.9\.2 is required for symbol discovery and identifier-aware quote resolution",
+                r"sahmk>=0\.11\.0 is required for MCP-SDK compatibility",
             ):
                 server._ensure_sahmk_min_version()
 
@@ -735,6 +735,34 @@ class TestNewCuratedTools(unittest.TestCase):
         self.assertIn("upcoming", result)
         self.assertIn("history", result)
         client.dividends.assert_called_once_with("1120")
+
+    @patch("sahmk_mcp.server._get_client")
+    def test_get_historical_accepts_intraday_interval(self, mock_get_client):
+        client = MagicMock()
+        client.historical.return_value.raw = {"symbol": "1120", "historical": []}
+        mock_get_client.return_value = client
+
+        result = server.get_historical(
+            symbol="1120",
+            from_date="2026-01-01",
+            to_date="2026-01-31",
+            interval="60m",
+        )
+
+        self.assertEqual(result["symbol"], "1120")
+        client.historical.assert_called_once_with(
+            "1120",
+            from_date="2026-01-01",
+            to_date="2026-01-31",
+            interval="60m",
+        )
+
+    def test_get_historical_rejects_invalid_interval(self):
+        with self.assertRaisesRegex(
+            ValueError,
+            "Must be one of: '1d' \\(daily\\), '1w' \\(weekly\\), '1m' \\(monthly\\), '30m' \\(30-minute\\), or '60m' \\(60-minute\\)",
+        ):
+            server.get_historical(symbol="1120", interval="15m")
 
 
 if __name__ == "__main__":

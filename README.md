@@ -51,7 +51,7 @@ SDK repo: [sahmk-sa/sahmk-python](https://github.com/sahmk-sa/sahmk-python)
 pip install sahmk-mcp
 ```
 
-Requires `sahmk>=0.9.2` for symbol discovery (`companies_list`) and identifier-aware quote resolution (`identifier`/`identifiers`).
+Requires `sahmk>=0.11.0` for current MCP-SDK compatibility, including expanded historical intervals (`30m`/`60m`).
 
 ## Security
 
@@ -128,7 +128,7 @@ sahmk-mcp
 - `companies_list.market`: `TASI` or `NOMU` (`NOMUC` alias is accepted and normalized).
 - `companies_list.limit`: integer greater than 0.
 - `companies_list.offset`: integer greater than or equal to 0.
-- `get_historical.interval`: `1d`, `1w`, or `1m`.
+- `get_historical.interval`: `1d`, `1w`, `1m`, `30m`, or `60m`.
 - Ambiguous identifiers raise `AMBIGUOUS_IDENTIFIER` with retry guidance and candidates when available.
 - Invalid identifiers and plan-gated requests return the underlying API error.
 
@@ -148,6 +148,7 @@ sahmk-mcp
 - Compare symbols extended: `compare_symbols(symbols=["1120", "1180", "1010", "2222"], metrics="extended")`
 - Dividends by exact symbol: `get_dividends(symbol="1120")`
 - Historical by exact symbol: `get_historical(symbol="1120", interval="1d")`
+- Intraday historical by exact symbol (plan-gated by API key): `get_historical(symbol="1120", interval="60m")`
 
 ## Company Directory / Symbol Discovery
 
@@ -187,9 +188,11 @@ Use `companies_list` first to reduce invalid-symbol 404s before symbol-only tool
 - "Tell me about الراجحي and its sector."
 
 Note: `get_financials` and `get_dividends` require Sahmk API access on Starter or higher. If unavailable for the current key, the MCP returns the underlying API error.
+Note: intraday historical intervals (`30m`, `60m`) may be plan-gated. If unavailable for the current key, the MCP surfaces the API error (for example `403 PLAN_LIMIT`).
 
 ## Release Notes
 
+- `0.4.5`: align to `sahmk>=0.11.0`; extend `get_historical.interval` support to `30m`/`60m`; document intraday plan-gating behavior.
 - `0.4.4`: docs: clarify official distribution channels (GitHub + PyPI only)
 - `0.4.3`: Align MCP output contract: no financials `meta`; analytics `meta` is limited to `period`, `metrics`, and `warnings`.
 - `0.4.2`: Add SDK method-name compatibility fallback for analytics (`get_ratios`/`ratios`, `compare_symbols`/`compare`).
