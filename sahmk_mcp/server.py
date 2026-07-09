@@ -356,33 +356,65 @@ def _resolve_single_identifier(
     identifier: Optional[str],
     symbol: Optional[str],
 ) -> str:
-    if identifier is not None and symbol is not None and identifier != symbol:
+    normalized_identifier = (
+        _normalize_identifier_digits(identifier.strip())
+        if isinstance(identifier, str) and identifier.strip()
+        else identifier
+    )
+    normalized_symbol = (
+        _normalize_identifier_digits(symbol.strip())
+        if isinstance(symbol, str) and symbol.strip()
+        else symbol
+    )
+    if (
+        identifier is not None
+        and symbol is not None
+        and normalized_identifier != normalized_symbol
+    ):
         raise ValueError(
             "Conflicting inputs: provide either 'identifier' (preferred) "
             "or legacy 'symbol', not both with different values."
         )
-    value = identifier if identifier is not None else symbol
+    value = normalized_identifier if identifier is not None else normalized_symbol
     if value is None or not isinstance(value, str) or not value.strip():
         raise ValueError(
             "Missing required stock input: provide 'identifier' "
             "(preferred) or legacy 'symbol'."
         )
-    return _normalize_identifier_digits(value.strip())
+    return value.strip()
 
 
 def _resolve_batch_identifiers(
     identifiers: Optional[list[str]],
     symbols: Optional[list[str]],
 ) -> list[str]:
-    if identifiers is not None and symbols is not None and identifiers != symbols:
+    normalized_identifiers = (
+        [_normalize_identifier_digits(value.strip()) for value in identifiers]
+        if identifiers is not None
+        else None
+    )
+    normalized_symbols = (
+        [_normalize_identifier_digits(value.strip()) for value in symbols]
+        if symbols is not None
+        else None
+    )
+    if (
+        identifiers is not None
+        and symbols is not None
+        and normalized_identifiers != normalized_symbols
+    ):
         raise ValueError(
             "Conflicting inputs: provide either 'identifiers' (preferred) "
             "or legacy 'symbols', not both with different values."
         )
-    values = identifiers if identifiers is not None else symbols
+    values = (
+        normalized_identifiers
+        if normalized_identifiers is not None
+        else normalized_symbols
+    )
     if not values:
         raise ValueError("At least one identifier is required.")
-    return [_normalize_identifier_digits(value.strip()) for value in values]
+    return values
 
 
 def _normalize_market_movers_response(mover_type: str, raw: dict) -> dict:

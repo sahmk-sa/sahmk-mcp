@@ -195,6 +195,17 @@ class TestNewCuratedTools(unittest.TestCase):
         client.quote.assert_called_once_with("2222")
 
     @patch("sahmk_mcp.server._get_client")
+    def test_get_quote_allows_equivalent_identifier_and_symbol(self, mock_get_client):
+        client = MagicMock()
+        client.quote.return_value.raw = {"symbol": "2222"}
+        mock_get_client.return_value = client
+
+        result = server.get_quote(identifier="٢٢٢٢", symbol="2222")
+
+        self.assertEqual(result["symbol"], "2222")
+        client.quote.assert_called_once_with("2222")
+
+    @patch("sahmk_mcp.server._get_client")
     def test_get_quote_surfaces_ambiguity_with_candidates(self, mock_get_client):
         client = MagicMock()
         error = SahmkError(
@@ -331,6 +342,18 @@ class TestNewCuratedTools(unittest.TestCase):
         mock_get_client.return_value = client
 
         server.get_quotes(symbols=["2222", "1120"])
+        client.quotes.assert_called_once_with(["2222", "1120"])
+
+    @patch("sahmk_mcp.server._get_client")
+    def test_get_quotes_allows_equivalent_identifiers_and_symbols(
+        self, mock_get_client
+    ):
+        client = MagicMock()
+        client.quotes.return_value.raw = {"count": 2, "quotes": []}
+        mock_get_client.return_value = client
+
+        server.get_quotes(identifiers=["٢٢٢٢", "1120"], symbols=["2222", "1120"])
+
         client.quotes.assert_called_once_with(["2222", "1120"])
 
     def test_get_quotes_requires_identifiers(self):
