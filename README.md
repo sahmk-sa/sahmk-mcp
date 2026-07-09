@@ -1,10 +1,10 @@
-# sahmk-mcp
+# SAHMK MCP Server
 
 [![Official Source](https://img.shields.io/badge/Source-Official%20Only-0A66C2?style=for-the-badge)](https://github.com/sahmk-sa/sahmk-mcp)
 
-> **Official distribution:** GitHub (sahmk-sa) and PyPI only. Do not download binaries from third-party forks.
+> **Official distribution:** GitHub (`sahmk-sa/sahmk-mcp`) and PyPI (`sahmk-mcp`) only. Do not install from third-party forks.
 
-Official MCP server for [Sahmk](https://sahmk.sa/developers) — use Saudi market data inside AI agents such as Cursor and Claude Desktop.
+Official SAHMK MCP server for [SAHMK](https://sahmk.sa/developers) — use Saudi market data inside AI agents such as Cursor and Claude Desktop.
 
 This MCP exposes a curated set of Sahmk tools for AI agents, so assistants can query the Saudi market in natural language.
 
@@ -44,6 +44,11 @@ SDK repo: [sahmk-sa/sahmk-python](https://github.com/sahmk-sa/sahmk-python)
 1. Sign up at [sahmk.sa/developers](https://sahmk.sa/developers)
 2. Go to Dashboard → API Keys → Create Key
 3. Copy your key (starts with `shmk_live_` or `shmk_test_`)
+
+## Required Environment Variable
+
+`SAHMK_API_KEY` is required for all server runs (Claude Desktop, Cursor, and direct CLI usage).  
+Set it in your MCP client `env` config or export it before running `sahmk-mcp`.
 
 ## Installation
 
