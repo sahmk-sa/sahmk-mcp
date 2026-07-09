@@ -264,6 +264,58 @@ class TestNewCuratedTools(unittest.TestCase):
         client.quotes.assert_not_called()
 
     @patch("sahmk_mcp.server._get_client")
+    def test_get_company_falls_back_to_batch_resolution(self, mock_get_client):
+        client = MagicMock()
+
+        def _company_side_effect(value):
+            if value == "أرامكو":
+                raise SahmkError(
+                    "Unknown identifier '?': Stock symbol 'أرامكو' not found.",
+                    status_code=404,
+                    error_code="INVALID_SYMBOL",
+                )
+            company = MagicMock()
+            company.raw = {"symbol": "2222", "name": "أرامكو السعودية"}
+            return company
+
+        client.company.side_effect = _company_side_effect
+        client.quotes.return_value.raw = {
+            "quotes": [{"symbol": "2222", "name": "شركة الزيت العربية السعودية"}],
+            "count": 1,
+            "resolution": {
+                "requested_count": 1,
+                "resolved_count": 1,
+                "ambiguous": [],
+                "not_found": [],
+            },
+        }
+        mock_get_client.return_value = client
+
+        result = server.get_company(identifier="أرامكو")
+
+        self.assertEqual(result["symbol"], "2222")
+        self.assertEqual(client.company.call_count, 2)
+        client.company.assert_any_call("أرامكو")
+        client.company.assert_any_call("2222")
+        client.quotes.assert_called_once_with(["أرامكو"])
+
+    @patch("sahmk_mcp.server._get_client")
+    def test_get_company_numeric_not_found_does_not_resolve(self, mock_get_client):
+        client = MagicMock()
+        client.company.side_effect = SahmkError(
+            "API error 404: Stock symbol '9999' not found.",
+            status_code=404,
+            error_code="SYMBOL_NOT_FOUND",
+        )
+        mock_get_client.return_value = client
+
+        with self.assertRaises(SahmkError):
+            server.get_company(identifier="9999")
+
+        client.company.assert_called_once_with("9999")
+        client.quotes.assert_not_called()
+
+    @patch("sahmk_mcp.server._get_client")
     def test_get_quotes_accepts_flexible_identifiers(self, mock_get_client):
         client = MagicMock()
         client.quotes.return_value.raw = {"count": 2, "quotes": []}
@@ -513,6 +565,53 @@ class TestNewCuratedTools(unittest.TestCase):
         )
 
     @patch("sahmk_mcp.server._get_client")
+    def test_get_financials_normalizes_arabic_indic_digits(self, mock_get_client):
+        client = MagicMock()
+        client.financials.return_value.raw = {"symbol": "2222", "income_statements": []}
+        mock_get_client.return_value = client
+
+        result = server.get_financials(symbol="٢٢٢٢")
+
+        self.assertEqual(result["symbol"], "2222")
+        client.financials.assert_called_once_with("2222")
+
+    @patch("sahmk_mcp.server._get_client")
+    def test_get_financials_falls_back_to_identifier_resolution(self, mock_get_client):
+        client = MagicMock()
+
+        def _financials_side_effect(value, **kwargs):
+            if value == "أرامكو":
+                raise SahmkError(
+                    "Unknown identifier '?': Stock symbol 'أرامكو' not found.",
+                    status_code=404,
+                    error_code="INVALID_SYMBOL",
+                )
+            financials = MagicMock()
+            financials.raw = {"symbol": "2222", "income_statements": []}
+            return financials
+
+        client.financials.side_effect = _financials_side_effect
+        client.quotes.return_value.raw = {
+            "quotes": [{"symbol": "2222", "name": "شركة الزيت العربية السعودية"}],
+            "count": 1,
+            "resolution": {
+                "requested_count": 1,
+                "resolved_count": 1,
+                "ambiguous": [],
+                "not_found": [],
+            },
+        }
+        mock_get_client.return_value = client
+
+        result = server.get_financials(symbol="أرامكو")
+
+        self.assertEqual(result["symbol"], "2222")
+        self.assertEqual(client.financials.call_count, 2)
+        client.financials.assert_any_call("أرامكو")
+        client.financials.assert_any_call("2222")
+        client.quotes.assert_called_once_with(["أرامكو"])
+
+    @patch("sahmk_mcp.server._get_client")
     def test_get_ratios_defaults(self, mock_get_client):
         client = MagicMock()
         client.get_ratios.return_value.raw = {"symbol": "1120", "ratios": {"roe": 0.15}}
@@ -573,6 +672,52 @@ class TestNewCuratedTools(unittest.TestCase):
             period="quarterly",
             metrics="extended",
         )
+
+    @patch("sahmk_mcp.server._get_client")
+    def test_get_ratios_falls_back_to_identifier_resolution(self, mock_get_client):
+        client = MagicMock()
+
+        def _get_ratios_side_effect(value, **kwargs):
+            if value == "أرامكو":
+                raise SahmkError(
+                    "Unknown identifier '?': Stock symbol 'أرامكو' not found.",
+                    status_code=404,
+                    error_code="INVALID_SYMBOL",
+                )
+            ratios = MagicMock()
+            ratios.raw = {"symbol": "2222", "ratios": {}, "meta": {}}
+            return ratios
+
+        client.get_ratios.side_effect = _get_ratios_side_effect
+        client.quotes.return_value.raw = {
+            "quotes": [{"symbol": "2222", "name": "شركة الزيت العربية السعودية"}],
+            "count": 1,
+            "resolution": {
+                "requested_count": 1,
+                "resolved_count": 1,
+                "ambiguous": [],
+                "not_found": [],
+            },
+        }
+        mock_get_client.return_value = client
+
+        result = server.get_ratios(symbol="أرامكو")
+
+        self.assertEqual(result["symbol"], "2222")
+        self.assertEqual(client.get_ratios.call_count, 2)
+        client.get_ratios.assert_any_call(
+            "أرامكو",
+            history="latest",
+            period="annual",
+            metrics="core",
+        )
+        client.get_ratios.assert_any_call(
+            "2222",
+            history="latest",
+            period="annual",
+            metrics="core",
+        )
+        client.quotes.assert_called_once_with(["أرامكو"])
 
     @patch("sahmk_mcp.server._get_client")
     def test_get_ratios_falls_back_to_ratios_method(self, mock_get_client):
@@ -653,6 +798,46 @@ class TestNewCuratedTools(unittest.TestCase):
             ["1120", "1180", "1010"],
             metrics="core",
         )
+
+    @patch("sahmk_mcp.server._get_client")
+    def test_compare_symbols_falls_back_to_identifier_resolution(self, mock_get_client):
+        client = MagicMock()
+        first_error = SahmkError(
+            "Unknown identifier '?': Stock symbol 'أرامكو' not found.",
+            status_code=404,
+            error_code="INVALID_SYMBOL",
+        )
+
+        def _compare_side_effect(symbols, metrics="core"):
+            if symbols == ["أرامكو", "1180"]:
+                raise first_error
+            return MagicMock(
+                raw={
+                    "results": [{"symbol": "2222"}, {"symbol": "1180"}],
+                    "count": 2,
+                }
+            )
+
+        client.compare_symbols.side_effect = _compare_side_effect
+        client.quotes.return_value.raw = {
+            "quotes": [{"symbol": "2222", "name": "شركة الزيت العربية السعودية"}],
+            "count": 1,
+            "resolution": {
+                "requested_count": 1,
+                "resolved_count": 1,
+                "ambiguous": [],
+                "not_found": [],
+            },
+        }
+        mock_get_client.return_value = client
+
+        result = server.compare_symbols(symbols=["أرامكو", "1180"])
+
+        self.assertEqual(result["count"], 2)
+        self.assertEqual(client.compare_symbols.call_count, 2)
+        client.compare_symbols.assert_any_call(["أرامكو", "1180"], metrics="core")
+        client.compare_symbols.assert_any_call(["2222", "1180"], metrics="core")
+        client.quotes.assert_called_once_with(["أرامكو"])
 
     @patch("sahmk_mcp.server._get_client")
     def test_compare_symbols_falls_back_to_compare_method(self, mock_get_client):
@@ -737,6 +922,42 @@ class TestNewCuratedTools(unittest.TestCase):
         client.dividends.assert_called_once_with("1120")
 
     @patch("sahmk_mcp.server._get_client")
+    def test_get_dividends_falls_back_to_identifier_resolution(self, mock_get_client):
+        client = MagicMock()
+
+        def _dividends_side_effect(value):
+            if value == "أرامكو":
+                raise SahmkError(
+                    "Unknown identifier '?': Stock symbol 'أرامكو' not found.",
+                    status_code=404,
+                    error_code="INVALID_SYMBOL",
+                )
+            dividends = MagicMock()
+            dividends.raw = {"symbol": "2222", "history": []}
+            return dividends
+
+        client.dividends.side_effect = _dividends_side_effect
+        client.quotes.return_value.raw = {
+            "quotes": [{"symbol": "2222", "name": "شركة الزيت العربية السعودية"}],
+            "count": 1,
+            "resolution": {
+                "requested_count": 1,
+                "resolved_count": 1,
+                "ambiguous": [],
+                "not_found": [],
+            },
+        }
+        mock_get_client.return_value = client
+
+        result = server.get_dividends(symbol="أرامكو")
+
+        self.assertEqual(result["symbol"], "2222")
+        self.assertEqual(client.dividends.call_count, 2)
+        client.dividends.assert_any_call("أرامكو")
+        client.dividends.assert_any_call("2222")
+        client.quotes.assert_called_once_with(["أرامكو"])
+
+    @patch("sahmk_mcp.server._get_client")
     def test_get_historical_accepts_intraday_interval(self, mock_get_client):
         client = MagicMock()
         client.historical.return_value.raw = {"symbol": "1120", "historical": []}
@@ -756,6 +977,46 @@ class TestNewCuratedTools(unittest.TestCase):
             to_date="2026-01-31",
             interval="60m",
         )
+
+    @patch("sahmk_mcp.server._get_client")
+    def test_get_historical_falls_back_to_identifier_resolution(self, mock_get_client):
+        client = MagicMock()
+
+        def _historical_side_effect(value, **kwargs):
+            if value == "أرامكو":
+                raise SahmkError(
+                    "Unknown identifier '?': Stock symbol 'أرامكو' not found.",
+                    status_code=404,
+                    error_code="INVALID_SYMBOL",
+                )
+            historical = MagicMock()
+            historical.raw = {"symbol": "2222", "historical": []}
+            return historical
+
+        client.historical.side_effect = _historical_side_effect
+        client.quotes.return_value.raw = {
+            "quotes": [{"symbol": "2222", "name": "شركة الزيت العربية السعودية"}],
+            "count": 1,
+            "resolution": {
+                "requested_count": 1,
+                "resolved_count": 1,
+                "ambiguous": [],
+                "not_found": [],
+            },
+        }
+        mock_get_client.return_value = client
+
+        result = server.get_historical(symbol="أرامكو", interval="1d")
+
+        self.assertEqual(result["symbol"], "2222")
+        self.assertEqual(client.historical.call_count, 2)
+        client.historical.assert_any_call(
+            "أرامكو", from_date=None, to_date=None, interval="1d"
+        )
+        client.historical.assert_any_call(
+            "2222", from_date=None, to_date=None, interval="1d"
+        )
+        client.quotes.assert_called_once_with(["أرامكو"])
 
     def test_get_historical_rejects_invalid_interval(self):
         with self.assertRaisesRegex(

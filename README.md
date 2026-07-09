@@ -116,20 +116,20 @@ sahmk-mcp
 - `get_quote.symbol` *(legacy alias)*: accepted for backward compatibility.
 - `get_quotes.identifiers` *(preferred)*: maximum 50 identifiers per request.
 - `get_quotes.symbols` *(legacy alias)*: accepted for backward compatibility.
-- `get_financials.symbol`: requires exact exchange symbol.
+- `get_financials.symbol`: prefers exact exchange symbol; MCP attempts SDK-backed identifier resolution for names/aliases when possible.
 - `get_financials.period` and `get_financials.statement_period`: if both are provided, `period` takes precedence.
 - `get_financials` supports optional passthrough params: `type`, `period`, `statement_period`, `history`, `metrics`, `result`, `include_quality`, and `include_partial`.
 - `get_financials` response is statement-block focused and does not include `meta`.
-- `get_ratios.symbol`: requires exact exchange symbol.
+- `get_ratios.symbol`: prefers exact exchange symbol; MCP attempts SDK-backed identifier resolution for names/aliases when possible.
 - `get_ratios.history`: defaults to `latest`.
 - `get_ratios.period`: defaults to `annual`.
 - `get_ratios.metrics`: defaults to `core`.
-- `compare_symbols.symbols`: list of symbols (preferred) or comma-separated string.
+- `compare_symbols.symbols`: list of symbols (preferred) or comma-separated string; MCP attempts SDK-backed identifier resolution for names/aliases when possible.
 - `compare_symbols.metrics`: defaults to `core`.
 - `get_ratios` and `compare_symbols` include minimal `meta` only: `period`, `metrics`, `warnings`.
 - Analytics tools do not expose backend/internal fields such as `applied_profile`, `plan`, or source diagnostics.
-- `get_dividends.symbol`: requires exact exchange symbol.
-- `get_historical.symbol`: requires exact exchange symbol.
+- `get_dividends.symbol`: prefers exact exchange symbol; MCP attempts SDK-backed identifier resolution for names/aliases when possible.
+- `get_historical.symbol`: prefers exact exchange symbol; MCP attempts SDK-backed identifier resolution for names/aliases when possible.
 - `companies_list.market`: `TASI` or `NOMU` (`NOMUC` alias is accepted and normalized).
 - `companies_list.limit`: integer greater than 0.
 - `companies_list.offset`: integer greater than or equal to 0.
@@ -199,6 +199,7 @@ Note: intraday historical intervals (`30m`, `60m`) may be plan-gated. If unavail
 
 ## Release Notes
 
+- `0.4.6`: add SDK-backed identifier fallback for `get_company` and symbol-first tools (`get_financials`, `get_ratios`, `compare_symbols`, `get_dividends`, `get_historical`) when name/alias inputs fail direct symbol lookup.
 - `0.4.5`: align to `sahmk>=0.11.0`; extend `get_historical.interval` support to `30m`/`60m`; document intraday plan-gating behavior.
 - `0.4.4`: docs: clarify official distribution channels (GitHub + PyPI only)
 - `0.4.3`: Align MCP output contract: no financials `meta`; analytics `meta` is limited to `period`, `metrics`, and `warnings`.

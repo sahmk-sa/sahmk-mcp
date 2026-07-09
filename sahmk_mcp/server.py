@@ -11,6 +11,10 @@ from sahmk import SahmkClient, SahmkError
 _DATE_RE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
 _MIN_SAHMK_VERSION = (0, 11, 0)
 _HISTORICAL_INTERVALS = ("1d", "1w", "1m", "30m", "60m")
+_ARABIC_INDIC_DIGIT_TRANSLATION = str.maketrans(
+    "٠١٢٣٤٥٦٧٨٩۰۱۲۳۴۵۶۷۸۹",
+    "01234567890123456789",
+)
 
 mcp = FastMCP(
     "sahmk",
@@ -190,6 +194,16 @@ def _is_numeric_identifier(value: str) -> bool:
     return bool(value and value.isdigit())
 
 
+def _normalize_identifier_digits(value: str) -> str:
+    return value.translate(_ARABIC_INDIC_DIGIT_TRANSLATION)
+
+
+def _normalize_symbol_input(value: str, field_name: str = "symbol") -> str:
+    if not isinstance(value, str) or not value.strip():
+        raise ValueError(f"Invalid {field_name}: '{value}'. Must be a non-empty string.")
+    return _normalize_identifier_digits(value.strip())
+
+
 def _extract_first_quote(raw: dict) -> Optional[dict]:
     quotes = raw.get("quotes")
     if not isinstance(quotes, list) or not quotes:
@@ -198,6 +212,38 @@ def _extract_first_quote(raw: dict) -> Optional[dict]:
     if isinstance(first, dict):
         return first
     return None
+
+
+def _extract_quote_symbol(raw: dict) -> Optional[str]:
+    first = _extract_first_quote(raw)
+    if not isinstance(first, dict):
+        return None
+    symbol = first.get("symbol")
+    if isinstance(symbol, str) and symbol.strip():
+        return symbol.strip()
+    return None
+
+
+def _resolve_symbol_from_identifier(client: SahmkClient, identifier: str) -> Optional[str]:
+    identifier = _normalize_identifier_digits(identifier.strip())
+    if _is_numeric_identifier(identifier):
+        return identifier
+    try:
+        batch_raw = _to_raw_response(client.quotes([identifier]))
+    except SahmkError as error:
+        _raise_if_ambiguous_identifier(error, identifier)
+        return None
+    if not isinstance(batch_raw, dict):
+        return None
+    return _extract_quote_symbol(batch_raw)
+
+
+def _resolve_symbol_from_unknown_identifier_error(
+    client: SahmkClient, identifier: str, error: SahmkError
+) -> Optional[str]:
+    if not _is_unknown_identifier_error(error) or _is_numeric_identifier(identifier):
+        return None
+    return _resolve_symbol_from_identifier(client, identifier)
 
 
 def _extract_not_found_inputs(batch_raw: dict) -> list[str]:
@@ -321,7 +367,7 @@ def _resolve_single_identifier(
             "Missing required stock input: provide 'identifier' "
             "(preferred) or legacy 'symbol'."
         )
-    return value.strip()
+    return _normalize_identifier_digits(value.strip())
 
 
 def _resolve_batch_identifiers(
@@ -336,7 +382,7 @@ def _resolve_batch_identifiers(
     values = identifiers if identifiers is not None else symbols
     if not values:
         raise ValueError("At least one identifier is required.")
-    return values
+    return [_normalize_identifier_digits(value.strip()) for value in values]
 
 
 def _normalize_market_movers_response(mover_type: str, raw: dict) -> dict:
@@ -430,7 +476,7 @@ def _normalize_compare_response(raw: dict) -> dict:
 def _normalize_symbol_list_input(symbols: list[str] | str) -> list[str]:
     if isinstance(symbols, str):
         items = [part.strip() for part in symbols.split(",")]
-        normalized = [item for item in items if item]
+        normalized = [_normalize_identifier_digits(item) for item in items if item]
     elif isinstance(symbols, list):
         normalized = []
         for item in symbols:
@@ -440,7 +486,7 @@ def _normalize_symbol_list_input(symbols: list[str] | str) -> list[str]:
                 )
             stripped = item.strip()
             if stripped:
-                normalized.append(stripped)
+                normalized.append(_normalize_identifier_digits(stripped))
     else:
         raise ValueError(
             "Invalid symbols: provide a list of symbols or a comma-separated string."
@@ -603,11 +649,22 @@ def get_company(
 ) -> dict:
     """Get a company profile for a Saudi stock, including sector, industry, fundamentals, valuation, technical indicators, and analyst consensus.
     Use this when the user asks about a company's profile, key metrics, or detailed information."""
+    normalized_identifier = _normalize_symbol_input(identifier, field_name="identifier")
     client = _get_client()
     try:
-        return client.company(identifier).raw
+        return client.company(normalized_identifier).raw
     except SahmkError as error:
-        _raise_if_ambiguous_identifier(error, identifier)
+        try:
+            _raise_if_ambiguous_identifier(error, normalized_identifier)
+        except SahmkError:
+            # Keep resolution SDK-backed: if company lookup fails for a
+            # non-numeric identifier, attempt resolver-based symbol discovery.
+            resolved_symbol = _resolve_symbol_from_unknown_identifier_error(
+                client, normalized_identifier, error
+            )
+            if resolved_symbol and resolved_symbol != normalized_identifier:
+                return _to_raw_response(client.company(resolved_symbol))
+            raise error
 
 
 @mcp.tool
@@ -654,6 +711,7 @@ def get_financials(
     """Get company financial statements and key financial data.
     Use this for income statement, balance sheet, and cash flow requests.
     Requires exact exchange symbol."""
+    normalized_symbol = _normalize_symbol_input(symbol)
     client = _get_client()
     effective_statement_period = (
         period if period is not None else statement_period
@@ -674,9 +732,18 @@ def get_financials(
     if include_partial is not None:
         financials_kwargs["include_partial"] = include_partial
     try:
-        raw = _to_raw_response(client.financials(symbol, **financials_kwargs))
+        raw = _to_raw_response(client.financials(normalized_symbol, **financials_kwargs))
     except SahmkError as error:
-        _raise_if_ambiguous_identifier(error, symbol)
+        try:
+            _raise_if_ambiguous_identifier(error, normalized_symbol)
+        except SahmkError:
+            resolved_symbol = _resolve_symbol_from_unknown_identifier_error(
+                client, normalized_symbol, error
+            )
+            if resolved_symbol and resolved_symbol != normalized_symbol:
+                raw = _to_raw_response(client.financials(resolved_symbol, **financials_kwargs))
+            else:
+                raise error
     return _normalize_financials_response(raw)
 
 
@@ -702,6 +769,7 @@ def get_ratios(
     ] = "core",
 ) -> dict:
     """Get calculated financial ratios for one Saudi-listed company. Starter returns latest annual core ratios; Pro supports history, quarterly, and extended metrics."""
+    normalized_symbol = _normalize_symbol_input(symbol)
     client = _get_client()
     try:
         raw = _to_raw_response(
@@ -709,14 +777,33 @@ def get_ratios(
                 client,
                 "get_ratios",
                 "ratios",
-                symbol,
+                normalized_symbol,
                 history=history,
                 period=period,
                 metrics=metrics,
             )
         )
     except SahmkError as error:
-        _raise_if_ambiguous_identifier(error, symbol)
+        try:
+            _raise_if_ambiguous_identifier(error, normalized_symbol)
+        except SahmkError:
+            resolved_symbol = _resolve_symbol_from_unknown_identifier_error(
+                client, normalized_symbol, error
+            )
+            if resolved_symbol and resolved_symbol != normalized_symbol:
+                raw = _to_raw_response(
+                    _call_sdk_with_fallback(
+                        client,
+                        "get_ratios",
+                        "ratios",
+                        resolved_symbol,
+                        history=history,
+                        period=period,
+                        metrics=metrics,
+                    )
+                )
+            else:
+                raise error
     return _normalize_ratios_response(raw)
 
 
@@ -735,15 +822,34 @@ def compare_symbols(
     """Compare multiple Saudi-listed companies using normalized financial ratios and key metrics. Starter supports up to 3 symbols; Pro supports up to 10."""
     normalized_symbols = _normalize_symbol_list_input(symbols)
     client = _get_client()
-    raw = _to_raw_response(
-        _call_sdk_with_fallback(
-            client,
-            "compare_symbols",
-            "compare",
-            normalized_symbols,
-            metrics=metrics,
+    try:
+        raw = _to_raw_response(
+            _call_sdk_with_fallback(
+                client,
+                "compare_symbols",
+                "compare",
+                normalized_symbols,
+                metrics=metrics,
+            )
         )
-    )
+    except SahmkError as error:
+        if not _is_unknown_identifier_error(error):
+            raise error
+        resolved_symbols = [
+            _resolve_symbol_from_identifier(client, value) or value
+            for value in normalized_symbols
+        ]
+        if resolved_symbols == normalized_symbols:
+            raise error
+        raw = _to_raw_response(
+            _call_sdk_with_fallback(
+                client,
+                "compare_symbols",
+                "compare",
+                resolved_symbols,
+                metrics=metrics,
+            )
+        )
     return _normalize_compare_response(raw)
 
 
@@ -759,11 +865,21 @@ def get_dividends(
     """Get company dividend history and yield data.
     Use this when the user asks for dividends or payout history.
     Requires exact exchange symbol."""
+    normalized_symbol = _normalize_symbol_input(symbol)
     client = _get_client()
     try:
-        raw = client.dividends(symbol).raw
+        raw = client.dividends(normalized_symbol).raw
     except SahmkError as error:
-        _raise_if_ambiguous_identifier(error, symbol)
+        try:
+            _raise_if_ambiguous_identifier(error, normalized_symbol)
+        except SahmkError:
+            resolved_symbol = _resolve_symbol_from_unknown_identifier_error(
+                client, normalized_symbol, error
+            )
+            if resolved_symbol and resolved_symbol != normalized_symbol:
+                raw = _to_raw_response(client.dividends(resolved_symbol))
+            else:
+                raise error
     return _normalize_dividends_response(raw)
 
 
@@ -796,13 +912,29 @@ def get_historical(
             f"Invalid interval: '{interval}'. Must be one of: "
             "'1d' (daily), '1w' (weekly), '1m' (monthly), '30m' (30-minute), or '60m' (60-minute)."
         )
+    normalized_symbol = _normalize_symbol_input(symbol)
     client = _get_client()
     try:
         return client.historical(
-            symbol, from_date=from_date, to_date=to_date, interval=interval
+            normalized_symbol, from_date=from_date, to_date=to_date, interval=interval
         ).raw
     except SahmkError as error:
-        _raise_if_ambiguous_identifier(error, symbol)
+        try:
+            _raise_if_ambiguous_identifier(error, normalized_symbol)
+        except SahmkError:
+            resolved_symbol = _resolve_symbol_from_unknown_identifier_error(
+                client, normalized_symbol, error
+            )
+            if resolved_symbol and resolved_symbol != normalized_symbol:
+                return _to_raw_response(
+                    client.historical(
+                        resolved_symbol,
+                        from_date=from_date,
+                        to_date=to_date,
+                        interval=interval,
+                    )
+                )
+            raise error
 
 
 @mcp.tool
