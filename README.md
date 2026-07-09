@@ -118,7 +118,7 @@ sahmk-mcp
 - `get_quotes.symbols` *(legacy alias)*: accepted for backward compatibility.
 - `get_financials.symbol`: prefers exact exchange symbol; MCP attempts SDK-backed identifier resolution for names/aliases when possible.
 - `get_financials.period` and `get_financials.statement_period`: if both are provided, `period` takes precedence.
-- `get_financials` supports optional passthrough params: `type`, `period`, `statement_period`, `history`, `metrics`, `result`, `include_quality`, and `include_partial`.
+- `get_financials` supports optional passthrough params: `type`, `period`, `statement_period`, `history`, `metrics`, `result`, and `include_partial`.
 - `get_financials` response is statement-block focused and does not include `meta`.
 - `get_ratios.symbol`: prefers exact exchange symbol; MCP attempts SDK-backed identifier resolution for names/aliases when possible.
 - `get_ratios.history`: defaults to `latest`.

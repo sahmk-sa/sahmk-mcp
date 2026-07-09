@@ -549,7 +549,6 @@ class TestNewCuratedTools(unittest.TestCase):
             history="5y",
             metrics="extended",
             result="raw",
-            include_quality=True,
             include_partial=False,
         )
 
@@ -560,7 +559,6 @@ class TestNewCuratedTools(unittest.TestCase):
             history="5y",
             metrics="extended",
             result="raw",
-            include_quality=True,
             include_partial=False,
         )
 

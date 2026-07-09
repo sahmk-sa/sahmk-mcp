@@ -699,10 +699,6 @@ def get_financials(
         Optional[str],
         "Optional result shaping selector.",
     ] = None,
-    include_quality: Annotated[
-        Optional[bool],
-        "Optionally include quality indicators in response payload.",
-    ] = None,
     include_partial: Annotated[
         Optional[bool],
         "Optionally include partial/incomplete statement periods when available.",
@@ -727,8 +723,6 @@ def get_financials(
         financials_kwargs["metrics"] = metrics
     if result is not None:
         financials_kwargs["result"] = result
-    if include_quality is not None:
-        financials_kwargs["include_quality"] = include_quality
     if include_partial is not None:
         financials_kwargs["include_partial"] = include_partial
     try:
