@@ -669,6 +669,53 @@ class TestNewCuratedTools(unittest.TestCase):
         client.quotes.assert_called_once_with(["الراجحي"])
 
     @patch("sahmk_mcp.server._get_client")
+    def test_get_financials_falls_back_via_companies_when_quotes_unknown(
+        self, mock_get_client
+    ):
+        client = MagicMock()
+
+        def _financials_side_effect(value, **kwargs):
+            if value == "الحبيب":
+                raise SahmkError(
+                    "Unknown identifier '?': Stock symbol 'الحبيب' not found.",
+                    status_code=404,
+                    error_code="SYMBOL_NOT_FOUND",
+                )
+            financials = MagicMock()
+            financials.raw = {"symbol": "4013", "income_statements": []}
+            return financials
+
+        client.financials.side_effect = _financials_side_effect
+        client.quotes.side_effect = SahmkError(
+            "Unknown identifier '?': Stock symbol 'الحبيب' not found.",
+            status_code=404,
+            error_code="SYMBOL_NOT_FOUND",
+        )
+        client.companies.return_value.raw = {
+            "results": [
+                {
+                    "symbol": "4013",
+                    "name": "د. سليمان الحبيب",
+                    "name_en": "Dr. Sulaiman Al Habib",
+                }
+            ],
+            "count": 1,
+            "total": 1,
+            "limit": 10,
+            "offset": 0,
+        }
+        mock_get_client.return_value = client
+
+        result = server.get_financials(symbol="الحبيب")
+
+        self.assertEqual(result["symbol"], "4013")
+        self.assertEqual(client.financials.call_count, 2)
+        client.financials.assert_any_call("الحبيب")
+        client.financials.assert_any_call("4013")
+        client.quotes.assert_called_once_with(["الحبيب"])
+        client.companies.assert_called_once_with(search="الحبيب", limit=10, offset=0)
+
+    @patch("sahmk_mcp.server._get_client")
     def test_get_ratios_defaults(self, mock_get_client):
         client = MagicMock()
         client.get_ratios.return_value.raw = {"symbol": "1120", "ratios": {"roe": 0.15}}
