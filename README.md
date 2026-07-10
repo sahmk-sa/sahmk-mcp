@@ -199,6 +199,7 @@ Note: intraday historical intervals (`30m`, `60m`) may be plan-gated. If unavail
 
 ## Release Notes
 
+- `0.4.7`: remove `include_quality` from public `get_financials` tool contract, normalize equivalent Arabic-Indic/ASCII digit inputs before identifier conflict checks, and improve Glama form UX with enum selectors for stable ratio/period options.
 - `0.4.6`: add SDK-backed identifier fallback for `get_company` and symbol-first tools (`get_financials`, `get_ratios`, `compare_symbols`, `get_dividends`, `get_historical`) when name/alias inputs fail direct symbol lookup.
 - `0.4.5`: align to `sahmk>=0.11.0`; extend `get_historical.interval` support to `30m`/`60m`; document intraday plan-gating behavior.
 - `0.4.4`: docs: clarify official distribution channels (GitHub + PyPI only)
