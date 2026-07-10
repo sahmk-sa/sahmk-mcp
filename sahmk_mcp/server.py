@@ -181,11 +181,17 @@ def _is_ambiguous_identifier_error(error: SahmkError) -> bool:
 
 def _is_unknown_identifier_error(error: SahmkError) -> bool:
     code = (getattr(error, "error_code", "") or "").upper()
-    if "NOT_FOUND" in code:
+    if (
+        "NOT_FOUND" in code
+        or "INVALID_SYMBOL" in code
+        or "INVALID_IDENTIFIER" in code
+        or "UNKNOWN_IDENTIFIER" in code
+    ):
         return True
     message = str(error).lower()
     return (
         "unknown identifier" in message
+        or "invalid symbol" in message
         or "stock symbol" in message and "not found" in message
     )
 

@@ -633,6 +633,42 @@ class TestNewCuratedTools(unittest.TestCase):
         client.quotes.assert_called_once_with(["أرامكو"])
 
     @patch("sahmk_mcp.server._get_client")
+    def test_get_financials_falls_back_on_invalid_symbol_error_code(self, mock_get_client):
+        client = MagicMock()
+
+        def _financials_side_effect(value, **kwargs):
+            if value == "الراجحي":
+                raise SahmkError(
+                    "API error 404: invalid symbol input.",
+                    status_code=404,
+                    error_code="INVALID_SYMBOL",
+                )
+            financials = MagicMock()
+            financials.raw = {"symbol": "1120", "income_statements": []}
+            return financials
+
+        client.financials.side_effect = _financials_side_effect
+        client.quotes.return_value.raw = {
+            "quotes": [{"symbol": "1120", "name": "مصرف الراجحي"}],
+            "count": 1,
+            "resolution": {
+                "requested_count": 1,
+                "resolved_count": 1,
+                "ambiguous": [],
+                "not_found": [],
+            },
+        }
+        mock_get_client.return_value = client
+
+        result = server.get_financials(symbol="الراجحي")
+
+        self.assertEqual(result["symbol"], "1120")
+        self.assertEqual(client.financials.call_count, 2)
+        client.financials.assert_any_call("الراجحي")
+        client.financials.assert_any_call("1120")
+        client.quotes.assert_called_once_with(["الراجحي"])
+
+    @patch("sahmk_mcp.server._get_client")
     def test_get_ratios_defaults(self, mock_get_client):
         client = MagicMock()
         client.get_ratios.return_value.raw = {"symbol": "1120", "ratios": {"roe": 0.15}}
