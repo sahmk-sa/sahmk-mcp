@@ -230,59 +230,6 @@ def _extract_quote_symbol(raw: dict) -> Optional[str]:
     return None
 
 
-def _extract_company_results(raw: dict) -> list[dict]:
-    results = raw.get("results")
-    if not isinstance(results, list):
-        return []
-    return [item for item in results if isinstance(item, dict)]
-
-
-def _extract_company_symbol(raw_company: dict) -> Optional[str]:
-    symbol = raw_company.get("symbol")
-    if isinstance(symbol, str) and symbol.strip():
-        return symbol.strip()
-    return None
-
-
-def _resolve_symbol_from_companies_search(
-    client: SahmkClient, identifier: str
-) -> Optional[str]:
-    try:
-        companies_raw = _to_raw_response(client.companies(search=identifier, limit=10, offset=0))
-    except SahmkError:
-        return None
-    if not isinstance(companies_raw, dict):
-        return None
-
-    results = _extract_company_results(companies_raw)
-    if not results:
-        return None
-
-    normalized_identifier = identifier.strip()
-    lowered_identifier = normalized_identifier.casefold()
-    exact_symbols: list[str] = []
-    for item in results:
-        symbol = _extract_company_symbol(item)
-        if symbol is None:
-            continue
-
-        symbol_match = symbol.casefold() == lowered_identifier
-        name_match = any(
-            isinstance(item.get(key), str) and item.get(key, "").strip().casefold() == lowered_identifier
-            for key in ("name", "name_ar", "name_en")
-        )
-        if symbol_match or name_match:
-            exact_symbols.append(symbol)
-
-    if len(exact_symbols) == 1:
-        return exact_symbols[0]
-
-    # If discovery returns a single candidate, use it as a pragmatic fallback.
-    if len(results) == 1:
-        return _extract_company_symbol(results[0])
-    return None
-
-
 def _resolve_symbol_from_identifier(client: SahmkClient, identifier: str) -> Optional[str]:
     identifier = _normalize_identifier_digits(identifier.strip())
     if _is_numeric_identifier(identifier):
@@ -290,16 +237,11 @@ def _resolve_symbol_from_identifier(client: SahmkClient, identifier: str) -> Opt
     try:
         batch_raw = _to_raw_response(client.quotes([identifier]))
     except SahmkError as error:
-        if _is_ambiguous_identifier_error(error):
-            _raise_if_ambiguous_identifier(error, identifier)
-        # Some backends reject names in /quotes while /companies search can still resolve.
-        return _resolve_symbol_from_companies_search(client, identifier)
+        _raise_if_ambiguous_identifier(error, identifier)
+        return None
     if not isinstance(batch_raw, dict):
-        return _resolve_symbol_from_companies_search(client, identifier)
-    resolved_symbol = _extract_quote_symbol(batch_raw)
-    if resolved_symbol:
-        return resolved_symbol
-    return _resolve_symbol_from_companies_search(client, identifier)
+        return None
+    return _extract_quote_symbol(batch_raw)
 
 
 def _resolve_symbol_from_unknown_identifier_error(
