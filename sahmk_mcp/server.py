@@ -2,7 +2,7 @@
 
 import os
 import re
-from typing import Annotated, Optional
+from typing import Annotated, Literal, Optional
 
 from fastmcp import FastMCP
 
@@ -712,24 +712,24 @@ def get_financials(
         "Optional financial view selector (e.g. statement family/profile returned by backend).",
     ] = None,
     period: Annotated[
-        Optional[str],
-        "Optional period selector. If both period and statement_period are provided, period takes precedence.",
+        Optional[Literal["annual", "quarterly", "auto"]],
+        "Optional period selector: annual, quarterly, or auto. If both period and statement_period are provided, period takes precedence.",
     ] = None,
     statement_period: Annotated[
-        Optional[str],
-        "Optional explicit statement period selector. Ignored when period is provided.",
+        Optional[Literal["annual", "quarterly", "auto"]],
+        "Optional explicit statement period selector (annual, quarterly, or auto). Ignored when period is provided.",
     ] = None,
     history: Annotated[
         Optional[str],
-        "Optional history window selector.",
+        "Optional history window selector. Common values: latest, 1y, 3y, 5y, 10y, max (backend-dependent).",
     ] = None,
     metrics: Annotated[
         Optional[str],
-        "Optional metrics profile selector.",
+        "Optional metrics profile selector. Common values: core, extended (backend-dependent).",
     ] = None,
     result: Annotated[
         Optional[str],
-        "Optional result shaping selector.",
+        "Optional result shaping selector. Common values: series, latest, raw (backend-dependent).",
     ] = None,
     include_partial: Annotated[
         Optional[bool],
@@ -782,16 +782,16 @@ def get_ratios(
         "Example: '1120'.",
     ],
     history: Annotated[
-        str,
-        "History window for ratios. Default 'latest'.",
+        Literal["latest", "3y", "5y", "10y", "max"],
+        "History window for ratios.",
     ] = "latest",
     period: Annotated[
-        str,
-        "Statement period for ratios, e.g. 'annual' or 'quarterly'. Default 'annual'.",
+        Literal["annual", "quarterly"],
+        "Statement period for ratios.",
     ] = "annual",
     metrics: Annotated[
-        str,
-        "Metrics profile, e.g. 'core' or 'extended'. Default 'core'.",
+        Literal["core", "extended"],
+        "Metrics profile for ratios.",
     ] = "core",
 ) -> dict:
     """Get calculated financial ratios for one Saudi-listed company. Starter returns latest annual core ratios; Pro supports history, quarterly, and extended metrics."""
