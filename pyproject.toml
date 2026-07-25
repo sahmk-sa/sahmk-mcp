@@ -1,6 +1,6 @@
 [project]
 name = "sahmk-mcp"
-version = "0.5.0"
+version = "0.5.1"
 description = "Official SAHMK MCP server for Saudi market data in AI agents."
 readme = "README.md"
 license = { text = "MIT" }

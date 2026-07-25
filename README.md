@@ -47,6 +47,12 @@ SDK repo: [sahmk-sa/sahmk-python](https://github.com/sahmk-sa/sahmk-python)
 2. Go to Dashboard → API Keys → Create Key
 3. Copy your key (starts with `shmk_live_` or `shmk_test_`)
 
+## Market Depth Access
+
+`get_depth` is entitlement-gated. Request realtime/depth access from the developer dashboard:
+
+[Request realtime access](https://www.sahmk.sa/developers/dashboard/realtime-access)
+
 ## Required Environment Variable
 
 `SAHMK_API_KEY` is required for all server runs (Claude Desktop, Cursor, and direct CLI usage).  
@@ -207,11 +213,12 @@ Use `companies_list` first to reduce invalid-symbol 404s before symbol-only tool
 - "Tell me about الراجحي and its sector."
 
 Note: `get_financials` and `get_dividends` require Sahmk API access on Starter or higher. If unavailable for the current key, the MCP returns the underlying API error.
-Note: `get_depth` is entitlement-gated and `get_events` requires Pro+. If unavailable for the current key, the MCP surfaces the API error.
+Note: `get_depth` is entitlement-gated — [request access](https://www.sahmk.sa/developers/dashboard/realtime-access). `get_events` requires Pro+. If unavailable for the current key, the MCP surfaces the API error.
 Note: intraday historical intervals (`30m`, `60m`) may be plan-gated. If unavailable for the current key, the MCP surfaces the API error (for example `403 PLAN_LIMIT`).
 
 ## Release Notes
 
+- `0.5.1`: document market-depth entitlement request link in the README.
 - `0.5.0`: require `sahmk>=0.13.0`; add `get_depth` (order-book ladder) and `get_events` (AI event summaries, Pro+).
 - `0.4.7`: remove `include_quality` from public `get_financials` tool contract, normalize equivalent Arabic-Indic/ASCII digit inputs before identifier conflict checks, and improve Glama form UX with enum selectors for stable ratio/period options.
 - `0.4.6`: add SDK-backed identifier fallback for `get_company` and symbol-first tools (`get_financials`, `get_ratios`, `compare_symbols`, `get_dividends`, `get_historical`) when name/alias inputs fail direct symbol lookup.
