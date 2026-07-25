@@ -32,3 +32,7 @@ jobs:
 
       - name: Publish package to PyPI
         uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          # Attestations call rekor.sigstore.dev; Rekor 5xx outages otherwise block releases.
+          # Trusted Publishing (OIDC) still authenticates the upload.
+          attestations: false
