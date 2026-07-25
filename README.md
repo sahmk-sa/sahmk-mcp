@@ -23,6 +23,8 @@ This MCP exposes a curated set of Sahmk tools for AI agents, so assistants can q
 | `get_ratios` | Calculated financial ratios *(Starter/Pro features vary)* |
 | `compare_symbols` | Multi-symbol normalized ratio/metrics comparison *(Starter/Pro limits vary)* |
 | `get_dividends` | Dividend history and yield data *(Starter+ plan)* |
+| `get_depth` | Order-book depth (bid/ask ladder, spread, imbalance) *(entitlement-gated)* |
+| `get_events` | AI-generated stock event summaries *(Pro+ plan)* |
 | `get_historical` | Historical OHLCV data |
 
 ## Identifier-First Contract
@@ -56,7 +58,7 @@ Set it in your MCP client `env` config or export it before running `sahmk-mcp`.
 pip install sahmk-mcp
 ```
 
-Requires `sahmk>=0.11.0` for current MCP-SDK compatibility, including expanded historical intervals (`30m`/`60m`).
+Requires `sahmk>=0.13.0` for current MCP-SDK compatibility, including market depth and events tools.
 
 ## Security
 
@@ -129,6 +131,10 @@ sahmk-mcp
 - `get_ratios` and `compare_symbols` include minimal `meta` only: `period`, `metrics`, `warnings`.
 - Analytics tools do not expose backend/internal fields such as `applied_profile`, `plan`, or source diagnostics.
 - `get_dividends.symbol`: prefers exact exchange symbol; MCP attempts SDK-backed identifier resolution for names/aliases when possible.
+- `get_depth.symbol`: prefers exact exchange symbol; MCP attempts SDK-backed identifier resolution for names/aliases when possible.
+- `get_depth.levels`: optional integer from 1 to 20 (backend default is typically 5; entitlement may cap below the request).
+- `get_events.symbol`: optional exact exchange symbol filter; omit for market-wide recent events.
+- `get_events.limit`: optional integer from 1 to 100.
 - `get_historical.symbol`: prefers exact exchange symbol; MCP attempts SDK-backed identifier resolution for names/aliases when possible.
 - `companies_list.market`: `TASI` or `NOMU` (`NOMUC` alias is accepted and normalized).
 - `companies_list.limit`: integer greater than 0.
@@ -152,6 +158,10 @@ sahmk-mcp
 - Compare symbols defaults: `compare_symbols(symbols=["1120", "1180", "1010"])`
 - Compare symbols extended: `compare_symbols(symbols=["1120", "1180", "1010", "2222"], metrics="extended")`
 - Dividends by exact symbol: `get_dividends(symbol="1120")`
+- Market depth by exact symbol: `get_depth(symbol="2222")`
+- Market depth with levels: `get_depth(symbol="2222", levels=10)`
+- Recent market events: `get_events(limit=10)`
+- Events for one symbol: `get_events(symbol="1120", limit=5)`
 - Historical by exact symbol: `get_historical(symbol="1120", interval="1d")`
 - Historical with explicit daily date range args: `get_historical(symbol="1120", from_date="2026-01-01", to_date="2026-03-31", interval="1d")`
 - Intraday historical by exact symbol (plan-gated by API key): `get_historical(symbol="1120", interval="60m")`
@@ -191,14 +201,18 @@ Use `companies_list` first to reduce invalid-symbol 404s before symbol-only tool
 - "Show me NOMU summary for today."
 - "Get financials for 2222."
 - "Get dividends for 2222."
+- "Show me the order book / market depth for 2222."
+- "What are the latest stock events?"
 - "Get 1d historical data for 1120 from 2026-01-01 to 2026-03-31."
 - "Tell me about الراجحي and its sector."
 
 Note: `get_financials` and `get_dividends` require Sahmk API access on Starter or higher. If unavailable for the current key, the MCP returns the underlying API error.
+Note: `get_depth` is entitlement-gated and `get_events` requires Pro+. If unavailable for the current key, the MCP surfaces the API error.
 Note: intraday historical intervals (`30m`, `60m`) may be plan-gated. If unavailable for the current key, the MCP surfaces the API error (for example `403 PLAN_LIMIT`).
 
 ## Release Notes
 
+- `0.5.0`: require `sahmk>=0.13.0`; add `get_depth` (order-book ladder) and `get_events` (AI event summaries, Pro+).
 - `0.4.7`: remove `include_quality` from public `get_financials` tool contract, normalize equivalent Arabic-Indic/ASCII digit inputs before identifier conflict checks, and improve Glama form UX with enum selectors for stable ratio/period options.
 - `0.4.6`: add SDK-backed identifier fallback for `get_company` and symbol-first tools (`get_financials`, `get_ratios`, `compare_symbols`, `get_dividends`, `get_historical`) when name/alias inputs fail direct symbol lookup.
 - `0.4.5`: align to `sahmk>=0.11.0`; extend `get_historical.interval` support to `30m`/`60m`; document intraday plan-gating behavior.

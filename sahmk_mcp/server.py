@@ -9,7 +9,7 @@ from fastmcp import FastMCP
 from sahmk import SahmkClient, SahmkError
 
 _DATE_RE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
-_MIN_SAHMK_VERSION = (0, 11, 0)
+_MIN_SAHMK_VERSION = (0, 13, 0)
 _HISTORICAL_INTERVALS = ("1d", "1w", "1m", "30m", "60m")
 _ARABIC_INDIC_DIGIT_TRANSLATION = str.maketrans(
     "٠١٢٣٤٥٦٧٨٩۰۱۲۳۴۵۶۷۸۹",
@@ -26,8 +26,9 @@ mcp = FastMCP(
         "Use get_quote for a single stock price, get_quotes to compare multiple stocks, "
         "get_market_summary for the overall market (optionally by index), get_market_movers for top gainers/losers/leaders, "
         "get_sectors for sector performance, get_company for company details, get_financials and get_dividends for fundamentals, "
+        "get_depth for order-book depth (bid/ask ladder), get_events for AI stock event summaries (Pro+), "
         "and get_historical for past price data. "
-        "For get_financials/get_dividends/get_historical, requires exact exchange symbol. "
+        "For get_financials/get_dividends/get_historical/get_depth, requires exact exchange symbol. "
         "If the user provides a company name, first use companies_list. "
         "If a previous tool result included resolved_instrument.symbol, reuse that symbol. "
         "Example flow: User says 'سعر الراجحي' -> get_quote(identifier='الراجحي'). "
@@ -536,6 +537,54 @@ def _normalize_symbol_list_input(symbols: list[str] | str) -> list[str]:
     return normalized
 
 
+def _normalize_depth_levels(levels: int | None) -> int | None:
+    if levels is None:
+        return None
+    if not isinstance(levels, int) or isinstance(levels, bool) or levels < 1 or levels > 20:
+        raise ValueError(
+            f"Invalid levels: '{levels}'. Must be an integer from 1 to 20."
+        )
+    return levels
+
+
+def _normalize_events_limit(limit: int | None) -> int | None:
+    if limit is None:
+        return None
+    if not isinstance(limit, int) or isinstance(limit, bool) or limit < 1 or limit > 100:
+        raise ValueError(
+            f"Invalid limit: '{limit}'. Must be an integer from 1 to 100."
+        )
+    return limit
+
+
+def _normalize_depth_response(raw: dict) -> dict:
+    normalized = dict(raw) if isinstance(raw, dict) else {}
+    normalized.setdefault("symbol", None)
+    normalized.setdefault("updated_at", None)
+    normalized.setdefault("session", None)
+    normalized.setdefault("book_state", None)
+    normalized.setdefault("levels", None)
+    normalized.setdefault("best_bid", None)
+    normalized.setdefault("best_ask", None)
+    normalized.setdefault("spread", None)
+    normalized.setdefault("spread_bps", None)
+    normalized.setdefault("total_bid_quantity_top5", None)
+    normalized.setdefault("total_ask_quantity_top5", None)
+    normalized.setdefault("level_imbalance", None)
+    normalized.setdefault("bids", [])
+    normalized.setdefault("asks", [])
+    normalized.setdefault("entitled_levels", None)
+    return normalized
+
+
+def _normalize_events_response(raw: dict) -> dict:
+    normalized = dict(raw) if isinstance(raw, dict) else {}
+    normalized.setdefault("events", [])
+    normalized.setdefault("count", None)
+    normalized.setdefault("available_types", [])
+    return normalized
+
+
 def _call_sdk_with_fallback(client: SahmkClient, primary: str, fallback: str, *args, **kwargs):
     method = getattr(client, primary, None)
     if method is None:
@@ -913,6 +962,88 @@ def get_dividends(
             else:
                 raise error
     return _normalize_dividends_response(raw)
+
+
+@mcp.tool
+def get_depth(
+    symbol: Annotated[
+        str,
+        "Requires exact exchange symbol. If the user provides a company name, first use companies_list. "
+        "If a previous tool result included resolved_instrument.symbol, reuse that symbol. "
+        "Example: '2222'.",
+    ],
+    levels: Annotated[
+        Optional[int],
+        "Optional number of book levels to request (1-20). Backend default is 5; "
+        "entitlement may return fewer levels than requested.",
+    ] = None,
+) -> dict:
+    """Get market depth (order book) for a Saudi stock.
+    Use this for bid/ask ladder, spread, imbalance, and liquidity at the top of book.
+    Requires exact exchange symbol. Plan/entitlement-gated by the API."""
+    normalized_symbol = _normalize_symbol_input(symbol)
+    normalized_levels = _normalize_depth_levels(levels)
+    client = _get_client()
+    try:
+        raw = _to_raw_response(
+            client.depth(normalized_symbol, levels=normalized_levels)
+        )
+    except SahmkError as error:
+        try:
+            _raise_if_ambiguous_identifier(error, normalized_symbol)
+        except SahmkError:
+            resolved_symbol = _resolve_symbol_from_unknown_identifier_error(
+                client, normalized_symbol, error
+            )
+            if resolved_symbol and resolved_symbol != normalized_symbol:
+                raw = _to_raw_response(
+                    client.depth(resolved_symbol, levels=normalized_levels)
+                )
+            else:
+                raise error
+    return _normalize_depth_response(raw)
+
+
+@mcp.tool
+def get_events(
+    symbol: Annotated[
+        Optional[str],
+        "Optional exact exchange symbol filter. Omit for market-wide recent events. "
+        "Example: '1120'.",
+    ] = None,
+    limit: Annotated[
+        Optional[int],
+        "Optional max number of events to return (1-100). Backend default is typically 20.",
+    ] = None,
+) -> dict:
+    """Get AI-generated stock event summaries (Pro+ plan).
+    Use this for recent corporate/news-style events with type, importance, and sentiment.
+    Optionally filter by exact exchange symbol."""
+    normalized_symbol = (
+        _normalize_symbol_input(symbol) if symbol is not None else None
+    )
+    normalized_limit = _normalize_events_limit(limit)
+    client = _get_client()
+    try:
+        raw = _to_raw_response(
+            client.events(symbol=normalized_symbol, limit=normalized_limit)
+        )
+    except SahmkError as error:
+        if normalized_symbol is None:
+            raise error
+        try:
+            _raise_if_ambiguous_identifier(error, normalized_symbol)
+        except SahmkError:
+            resolved_symbol = _resolve_symbol_from_unknown_identifier_error(
+                client, normalized_symbol, error
+            )
+            if resolved_symbol and resolved_symbol != normalized_symbol:
+                raw = _to_raw_response(
+                    client.events(symbol=resolved_symbol, limit=normalized_limit)
+                )
+            else:
+                raise error
+    return _normalize_events_response(raw)
 
 
 @mcp.tool

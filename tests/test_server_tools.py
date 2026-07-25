@@ -161,14 +161,14 @@ class TestNewCuratedTools(unittest.TestCase):
         self.assertEqual(result, expected)
 
     def test_ensure_sahmk_min_version_allows_supported_version(self):
-        with patch("sahmk.__version__", "0.11.0"):
+        with patch("sahmk.__version__", "0.13.0"):
             server._ensure_sahmk_min_version()
 
     def test_ensure_sahmk_min_version_blocks_old_version(self):
-        with patch("sahmk.__version__", "0.10.9"):
+        with patch("sahmk.__version__", "0.12.1"):
             with self.assertRaisesRegex(
                 SahmkError,
-                r"sahmk>=0\.11\.0 is required for MCP-SDK compatibility",
+                r"sahmk>=0\.13\.0 is required for MCP-SDK compatibility",
             ):
                 server._ensure_sahmk_min_version()
 
@@ -1081,6 +1081,166 @@ class TestNewCuratedTools(unittest.TestCase):
             "Must be one of: '1d' \\(daily\\), '1w' \\(weekly\\), '1m' \\(monthly\\), '30m' \\(30-minute\\), or '60m' \\(60-minute\\)",
         ):
             server.get_historical(symbol="1120", interval="15m")
+
+    @patch("sahmk_mcp.server._get_client")
+    def test_get_depth_returns_normalized_book(self, mock_get_client):
+        client = MagicMock()
+        client.depth.return_value.raw = {
+            "symbol": "2222",
+            "best_bid": 26.8,
+            "best_ask": 26.84,
+            "spread": 0.04,
+            "bids": [{"level": 0, "price": 26.8, "quantity": 16, "order_count": 2}],
+            "asks": [{"level": 0, "price": 26.84, "quantity": 100, "order_count": 5}],
+            "levels": 5,
+            "entitled_levels": 5,
+        }
+        mock_get_client.return_value = client
+
+        result = server.get_depth(symbol="2222", levels=5)
+
+        self.assertEqual(result["symbol"], "2222")
+        self.assertEqual(result["best_bid"], 26.8)
+        self.assertEqual(result["best_ask"], 26.84)
+        self.assertEqual(len(result["bids"]), 1)
+        self.assertEqual(len(result["asks"]), 1)
+        client.depth.assert_called_once_with("2222", levels=5)
+
+    def test_get_depth_rejects_invalid_levels(self):
+        with self.assertRaisesRegex(ValueError, "Invalid levels"):
+            server.get_depth(symbol="2222", levels=0)
+        with self.assertRaisesRegex(ValueError, "Invalid levels"):
+            server.get_depth(symbol="2222", levels=21)
+
+    @patch("sahmk_mcp.server._get_client")
+    def test_get_depth_falls_back_to_identifier_resolution(self, mock_get_client):
+        client = MagicMock()
+
+        def _depth_side_effect(value, **kwargs):
+            if value == "أرامكو":
+                raise SahmkError(
+                    "Unknown identifier '?': Stock symbol 'أرامكو' not found.",
+                    status_code=404,
+                    error_code="INVALID_SYMBOL",
+                )
+            depth = MagicMock()
+            depth.raw = {
+                "symbol": "2222",
+                "best_bid": 26.8,
+                "best_ask": 26.84,
+                "bids": [],
+                "asks": [],
+            }
+            return depth
+
+        client.depth.side_effect = _depth_side_effect
+        client.quotes.return_value.raw = {
+            "quotes": [{"symbol": "2222", "name": "شركة الزيت العربية السعودية"}],
+            "count": 1,
+            "resolution": {
+                "requested_count": 1,
+                "resolved_count": 1,
+                "ambiguous": [],
+                "not_found": [],
+            },
+        }
+        mock_get_client.return_value = client
+
+        result = server.get_depth(symbol="أرامكو", levels=5)
+
+        self.assertEqual(result["symbol"], "2222")
+        self.assertEqual(client.depth.call_count, 2)
+        client.depth.assert_any_call("أرامكو", levels=5)
+        client.depth.assert_any_call("2222", levels=5)
+        client.quotes.assert_called_once_with(["أرامكو"])
+
+    @patch("sahmk_mcp.server._get_client")
+    def test_get_events_returns_normalized_payload(self, mock_get_client):
+        client = MagicMock()
+        client.events.return_value.raw = {
+            "events": [
+                {
+                    "symbol": "1120",
+                    "event_type": "earnings",
+                    "importance": "high",
+                    "sentiment": "positive",
+                    "description": "Strong quarter",
+                }
+            ],
+            "count": 1,
+            "available_types": ["earnings"],
+        }
+        mock_get_client.return_value = client
+
+        result = server.get_events(symbol="1120", limit=5)
+
+        self.assertEqual(result["count"], 1)
+        self.assertEqual(len(result["events"]), 1)
+        self.assertEqual(result["events"][0]["symbol"], "1120")
+        client.events.assert_called_once_with(symbol="1120", limit=5)
+
+    @patch("sahmk_mcp.server._get_client")
+    def test_get_events_allows_market_wide_without_symbol(self, mock_get_client):
+        client = MagicMock()
+        client.events.return_value.raw = {
+            "events": [],
+            "count": 0,
+            "available_types": [],
+        }
+        mock_get_client.return_value = client
+
+        result = server.get_events(limit=10)
+
+        self.assertEqual(result["count"], 0)
+        self.assertEqual(result["events"], [])
+        client.events.assert_called_once_with(symbol=None, limit=10)
+
+    def test_get_events_rejects_invalid_limit(self):
+        with self.assertRaisesRegex(ValueError, "Invalid limit"):
+            server.get_events(limit=0)
+        with self.assertRaisesRegex(ValueError, "Invalid limit"):
+            server.get_events(limit=101)
+
+    @patch("sahmk_mcp.server._get_client")
+    def test_get_events_falls_back_to_identifier_resolution(self, mock_get_client):
+        client = MagicMock()
+
+        def _events_side_effect(symbol=None, limit=None):
+            if symbol == "أرامكو":
+                raise SahmkError(
+                    "Unknown identifier '?': Stock symbol 'أرامكو' not found.",
+                    status_code=404,
+                    error_code="INVALID_SYMBOL",
+                )
+            events = MagicMock()
+            events.raw = {
+                "events": [{"symbol": "2222", "event_type": "news"}],
+                "count": 1,
+                "available_types": ["news"],
+            }
+            return events
+
+        client.events.side_effect = _events_side_effect
+        client.quotes.return_value.raw = {
+            "quotes": [{"symbol": "2222", "name": "شركة الزيت العربية السعودية"}],
+            "count": 1,
+            "resolution": {
+                "requested_count": 1,
+                "resolved_count": 1,
+                "ambiguous": [],
+                "not_found": [],
+            },
+        }
+        mock_get_client.return_value = client
+
+        result = server.get_events(symbol="أرامكو", limit=3)
+
+        self.assertEqual(result["count"], 1)
+        self.assertEqual(result["events"][0]["symbol"], "2222")
+        self.assertEqual(client.events.call_count, 2)
+        client.events.assert_any_call(symbol="أرامكو", limit=3)
+        client.events.assert_any_call(symbol="2222", limit=3)
+        client.quotes.assert_called_once_with(["أرامكو"])
 
 
 if __name__ == "__main__":
