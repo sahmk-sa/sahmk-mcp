@@ -24,6 +24,7 @@ This MCP exposes a curated set of Sahmk tools for AI agents, so assistants can q
 | `compare_symbols` | Multi-symbol normalized ratio/metrics comparison *(Starter/Pro limits vary)* |
 | `get_dividends` | Dividend history and yield data *(Starter+ plan)* |
 | `get_depth` | Order-book depth (bid/ask ladder, spread, imbalance) *(entitlement-gated)* |
+| `get_trades` | Recent live trade prints / tape *(Pro+ plan)* |
 | `get_events` | AI-generated stock event summaries *(Pro+ plan)* |
 | `get_historical` | Historical OHLCV data |
 
@@ -64,7 +65,7 @@ Set it in your MCP client `env` config or export it before running `sahmk-mcp`.
 pip install sahmk-mcp
 ```
 
-Requires `sahmk>=0.13.0` for current MCP-SDK compatibility, including market depth and events tools.
+Requires `sahmk>=0.14.0` for current MCP-SDK compatibility, including market depth, live trades, and events tools.
 
 ## Security
 
@@ -139,6 +140,8 @@ sahmk-mcp
 - `get_dividends.symbol`: prefers exact exchange symbol; MCP attempts SDK-backed identifier resolution for names/aliases when possible.
 - `get_depth.symbol`: prefers exact exchange symbol; MCP attempts SDK-backed identifier resolution for names/aliases when possible.
 - `get_depth.levels`: optional integer from 1 to 20 (backend default is typically 5; entitlement may cap below the request).
+- `get_trades.symbol`: prefers exact exchange symbol; MCP attempts SDK-backed identifier resolution for names/aliases when possible.
+- `get_trades.limit`: optional integer from 1 to 200 (backend default is typically 50; newest first).
 - `get_events.symbol`: optional exact exchange symbol filter; omit for market-wide recent events.
 - `get_events.limit`: optional integer from 1 to 100.
 - `get_historical.symbol`: prefers exact exchange symbol; MCP attempts SDK-backed identifier resolution for names/aliases when possible.
@@ -166,6 +169,8 @@ sahmk-mcp
 - Dividends by exact symbol: `get_dividends(symbol="1120")`
 - Market depth by exact symbol: `get_depth(symbol="2222")`
 - Market depth with levels: `get_depth(symbol="2222", levels=10)`
+- Recent trades by exact symbol: `get_trades(symbol="2222")`
+- Recent trades with limit: `get_trades(symbol="2222", limit=20)`
 - Recent market events: `get_events(limit=10)`
 - Events for one symbol: `get_events(symbol="1120", limit=5)`
 - Historical by exact symbol: `get_historical(symbol="1120", interval="1d")`
@@ -208,16 +213,18 @@ Use `companies_list` first to reduce invalid-symbol 404s before symbol-only tool
 - "Get financials for 2222."
 - "Get dividends for 2222."
 - "Show me the order book / market depth for 2222."
+- "Show me the latest trades for 2222."
 - "What are the latest stock events?"
 - "Get 1d historical data for 1120 from 2026-01-01 to 2026-03-31."
 - "Tell me about الراجحي and its sector."
 
 Note: `get_financials` and `get_dividends` require Sahmk API access on Starter or higher. If unavailable for the current key, the MCP returns the underlying API error.
-Note: `get_depth` is entitlement-gated — [request access](https://www.sahmk.sa/developers/dashboard/realtime-access). `get_events` requires Pro+. If unavailable for the current key, the MCP surfaces the API error.
+Note: `get_depth` is entitlement-gated — [request access](https://www.sahmk.sa/developers/dashboard/realtime-access). `get_trades` and `get_events` require Pro+. If unavailable for the current key, the MCP surfaces the API error.
 Note: intraday historical intervals (`30m`, `60m`) may be plan-gated. If unavailable for the current key, the MCP surfaces the API error (for example `403 PLAN_LIMIT`).
 
 ## Release Notes
 
+- `0.6.0`: require `sahmk>=0.14.0`; add `get_trades` for recent live trade prints (Pro+).
 - `0.5.1`: document market-depth entitlement request link in the README.
 - `0.5.0`: require `sahmk>=0.13.0`; add `get_depth` (order-book ladder) and `get_events` (AI event summaries, Pro+).
 - `0.4.7`: remove `include_quality` from public `get_financials` tool contract, normalize equivalent Arabic-Indic/ASCII digit inputs before identifier conflict checks, and improve Glama form UX with enum selectors for stable ratio/period options.

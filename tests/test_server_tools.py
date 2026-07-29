@@ -161,14 +161,14 @@ class TestNewCuratedTools(unittest.TestCase):
         self.assertEqual(result, expected)
 
     def test_ensure_sahmk_min_version_allows_supported_version(self):
-        with patch("sahmk.__version__", "0.13.0"):
+        with patch("sahmk.__version__", "0.14.0"):
             server._ensure_sahmk_min_version()
 
     def test_ensure_sahmk_min_version_blocks_old_version(self):
-        with patch("sahmk.__version__", "0.12.1"):
+        with patch("sahmk.__version__", "0.13.0"):
             with self.assertRaisesRegex(
                 SahmkError,
-                r"sahmk>=0\.13\.0 is required for MCP-SDK compatibility",
+                r"sahmk>=0\.14\.0 is required for MCP-SDK compatibility",
             ):
                 server._ensure_sahmk_min_version()
 
@@ -1081,6 +1081,85 @@ class TestNewCuratedTools(unittest.TestCase):
             "Must be one of: '1d' \\(daily\\), '1w' \\(weekly\\), '1m' \\(monthly\\), '30m' \\(30-minute\\), or '60m' \\(60-minute\\)",
         ):
             server.get_historical(symbol="1120", interval="15m")
+
+    @patch("sahmk_mcp.server._get_client")
+    def test_get_trades_returns_normalized_tape(self, mock_get_client):
+        client = MagicMock()
+        client.trades.return_value.raw = {
+            "symbol": "2222",
+            "updated_at": "2026-07-29T10:00:00+00:00",
+            "count": 1,
+            "events": [
+                {
+                    "event_time": "2026-07-29T10:00:00+00:00",
+                    "price": 26.5,
+                    "quantity": 100,
+                    "value": 2650.0,
+                }
+            ],
+            "summary": {
+                "event_count": 1,
+                "trade_quantity": 100,
+                "trade_value": 2650.0,
+                "latest_event_time": "2026-07-29T10:00:00+00:00",
+            },
+        }
+        mock_get_client.return_value = client
+
+        result = server.get_trades(symbol="2222", limit=20)
+
+        self.assertEqual(result["symbol"], "2222")
+        self.assertEqual(result["count"], 1)
+        self.assertEqual(len(result["events"]), 1)
+        self.assertEqual(result["summary"]["trade_quantity"], 100)
+        client.trades.assert_called_once_with("2222", limit=20)
+
+    def test_get_trades_rejects_invalid_limit(self):
+        with self.assertRaisesRegex(ValueError, "Invalid limit"):
+            server.get_trades(symbol="2222", limit=0)
+        with self.assertRaisesRegex(ValueError, "Invalid limit"):
+            server.get_trades(symbol="2222", limit=201)
+
+    @patch("sahmk_mcp.server._get_client")
+    def test_get_trades_falls_back_to_identifier_resolution(self, mock_get_client):
+        client = MagicMock()
+
+        def _trades_side_effect(value, **kwargs):
+            if value == "أرامكو":
+                raise SahmkError(
+                    "Unknown identifier '?': Stock symbol 'أرامكو' not found.",
+                    status_code=404,
+                    error_code="INVALID_SYMBOL",
+                )
+            trades = MagicMock()
+            trades.raw = {
+                "symbol": "2222",
+                "count": 0,
+                "events": [],
+                "summary": {},
+            }
+            return trades
+
+        client.trades.side_effect = _trades_side_effect
+        client.quotes.return_value.raw = {
+            "quotes": [{"symbol": "2222", "name": "شركة الزيت العربية السعودية"}],
+            "count": 1,
+            "resolution": {
+                "requested_count": 1,
+                "resolved_count": 1,
+                "ambiguous": [],
+                "not_found": [],
+            },
+        }
+        mock_get_client.return_value = client
+
+        result = server.get_trades(symbol="أرامكو", limit=10)
+
+        self.assertEqual(result["symbol"], "2222")
+        self.assertEqual(client.trades.call_count, 2)
+        client.trades.assert_any_call("أرامكو", limit=10)
+        client.trades.assert_any_call("2222", limit=10)
+        client.quotes.assert_called_once_with(["أرامكو"])
 
     @patch("sahmk_mcp.server._get_client")
     def test_get_depth_returns_normalized_book(self, mock_get_client):

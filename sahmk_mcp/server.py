@@ -9,7 +9,7 @@ from fastmcp import FastMCP
 from sahmk import SahmkClient, SahmkError
 
 _DATE_RE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
-_MIN_SAHMK_VERSION = (0, 13, 0)
+_MIN_SAHMK_VERSION = (0, 14, 0)
 _HISTORICAL_INTERVALS = ("1d", "1w", "1m", "30m", "60m")
 _ARABIC_INDIC_DIGIT_TRANSLATION = str.maketrans(
     "٠١٢٣٤٥٦٧٨٩۰۱۲۳۴۵۶۷۸۹",
@@ -26,9 +26,10 @@ mcp = FastMCP(
         "Use get_quote for a single stock price, get_quotes to compare multiple stocks, "
         "get_market_summary for the overall market (optionally by index), get_market_movers for top gainers/losers/leaders, "
         "get_sectors for sector performance, get_company for company details, get_financials and get_dividends for fundamentals, "
-        "get_depth for order-book depth (bid/ask ladder), get_events for AI stock event summaries (Pro+), "
+        "get_depth for order-book depth (bid/ask ladder), get_trades for recent live trade prints (Pro+), "
+        "get_events for AI stock event summaries (Pro+), "
         "and get_historical for past price data. "
-        "For get_financials/get_dividends/get_historical/get_depth, requires exact exchange symbol. "
+        "For get_financials/get_dividends/get_historical/get_depth/get_trades, requires exact exchange symbol. "
         "If the user provides a company name, first use companies_list. "
         "If a previous tool result included resolved_instrument.symbol, reuse that symbol. "
         "Example flow: User says 'سعر الراجحي' -> get_quote(identifier='الراجحي'). "
@@ -557,6 +558,16 @@ def _normalize_events_limit(limit: int | None) -> int | None:
     return limit
 
 
+def _normalize_trades_limit(limit: int | None) -> int | None:
+    if limit is None:
+        return None
+    if not isinstance(limit, int) or isinstance(limit, bool) or limit < 1 or limit > 200:
+        raise ValueError(
+            f"Invalid limit: '{limit}'. Must be an integer from 1 to 200."
+        )
+    return limit
+
+
 def _normalize_depth_response(raw: dict) -> dict:
     normalized = dict(raw) if isinstance(raw, dict) else {}
     normalized.setdefault("symbol", None)
@@ -582,6 +593,23 @@ def _normalize_events_response(raw: dict) -> dict:
     normalized.setdefault("events", [])
     normalized.setdefault("count", None)
     normalized.setdefault("available_types", [])
+    return normalized
+
+
+def _normalize_trades_response(raw: dict) -> dict:
+    normalized = dict(raw) if isinstance(raw, dict) else {}
+    normalized.setdefault("symbol", None)
+    normalized.setdefault("updated_at", None)
+    normalized.setdefault("count", None)
+    normalized.setdefault("events", [])
+    summary = normalized.get("summary")
+    if not isinstance(summary, dict):
+        summary = {}
+    summary.setdefault("event_count", None)
+    summary.setdefault("trade_quantity", None)
+    summary.setdefault("trade_value", None)
+    summary.setdefault("latest_event_time", None)
+    normalized["summary"] = summary
     return normalized
 
 
@@ -1002,6 +1030,46 @@ def get_depth(
             else:
                 raise error
     return _normalize_depth_response(raw)
+
+
+@mcp.tool
+def get_trades(
+    symbol: Annotated[
+        str,
+        "Requires exact exchange symbol. If the user provides a company name, first use companies_list. "
+        "If a previous tool result included resolved_instrument.symbol, reuse that symbol. "
+        "Example: '2222'.",
+    ],
+    limit: Annotated[
+        Optional[int],
+        "Optional max number of recent trade prints to return (1-200, newest first). "
+        "Backend default is typically 50.",
+    ] = None,
+) -> dict:
+    """Get recent live trade prints for a Saudi stock (Pro+ plan).
+    Use this for the trade tape: individual executions with price, quantity, value,
+    and a short summary of recent activity. Requires exact exchange symbol."""
+    normalized_symbol = _normalize_symbol_input(symbol)
+    normalized_limit = _normalize_trades_limit(limit)
+    client = _get_client()
+    try:
+        raw = _to_raw_response(
+            client.trades(normalized_symbol, limit=normalized_limit)
+        )
+    except SahmkError as error:
+        try:
+            _raise_if_ambiguous_identifier(error, normalized_symbol)
+        except SahmkError:
+            resolved_symbol = _resolve_symbol_from_unknown_identifier_error(
+                client, normalized_symbol, error
+            )
+            if resolved_symbol and resolved_symbol != normalized_symbol:
+                raw = _to_raw_response(
+                    client.trades(resolved_symbol, limit=normalized_limit)
+                )
+            else:
+                raise error
+    return _normalize_trades_response(raw)
 
 
 @mcp.tool
