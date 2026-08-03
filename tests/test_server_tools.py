@@ -1,3 +1,4 @@
+import os
 import unittest
 from unittest.mock import MagicMock, patch
 
@@ -161,16 +162,68 @@ class TestNewCuratedTools(unittest.TestCase):
         self.assertEqual(result, expected)
 
     def test_ensure_sahmk_min_version_allows_supported_version(self):
-        with patch("sahmk.__version__", "0.14.0"):
+        with patch("sahmk.__version__", "0.15.0"):
             server._ensure_sahmk_min_version()
 
     def test_ensure_sahmk_min_version_blocks_old_version(self):
-        with patch("sahmk.__version__", "0.13.0"):
+        with patch("sahmk.__version__", "0.14.0"):
             with self.assertRaisesRegex(
                 SahmkError,
-                r"sahmk>=0\.14\.0 is required for MCP-SDK compatibility",
+                r"sahmk>=0\.15\.0 is required for MCP-SDK compatibility",
             ):
                 server._ensure_sahmk_min_version()
+
+    def test_resolve_base_url_defaults_to_api_host(self):
+        env = {k: v for k, v in os.environ.items() if k != "SAHMK_BASE_URL"}
+        with patch.dict(os.environ, env, clear=True):
+            self.assertEqual(
+                server._resolve_base_url(),
+                "https://api.sahmk.sa/api/v1",
+            )
+
+    def test_resolve_base_url_honors_sahmk_base_url_override(self):
+        with patch.dict(
+            os.environ,
+            {"SAHMK_BASE_URL": "https://app.sahmk.sa/api/v1/"},
+        ):
+            self.assertEqual(
+                server._resolve_base_url(),
+                "https://app.sahmk.sa/api/v1",
+            )
+
+    @patch("sahmk_mcp.server.SahmkClient")
+    @patch("sahmk_mcp.server._ensure_sahmk_min_version")
+    def test_get_client_uses_default_api_host(self, _mock_version, mock_client_cls):
+        env = {
+            k: v
+            for k, v in os.environ.items()
+            if k != "SAHMK_BASE_URL"
+        }
+        env["SAHMK_API_KEY"] = "shmk_test_key"
+        with patch.dict(os.environ, env, clear=True):
+            server._get_client()
+
+        mock_client_cls.assert_called_once_with(
+            "shmk_test_key",
+            base_url="https://api.sahmk.sa/api/v1",
+        )
+
+    @patch("sahmk_mcp.server.SahmkClient")
+    @patch("sahmk_mcp.server._ensure_sahmk_min_version")
+    def test_get_client_uses_sahmk_base_url_override(self, _mock_version, mock_client_cls):
+        with patch.dict(
+            os.environ,
+            {
+                "SAHMK_API_KEY": "shmk_test_key",
+                "SAHMK_BASE_URL": "https://app.sahmk.sa/api/v1",
+            },
+        ):
+            server._get_client()
+
+        mock_client_cls.assert_called_once_with(
+            "shmk_test_key",
+            base_url="https://app.sahmk.sa/api/v1",
+        )
 
     @patch("sahmk_mcp.server._get_client")
     def test_get_quote_accepts_flexible_identifier(self, mock_get_client):

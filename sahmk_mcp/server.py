@@ -9,7 +9,10 @@ from fastmcp import FastMCP
 from sahmk import SahmkClient, SahmkError
 
 _DATE_RE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
-_MIN_SAHMK_VERSION = (0, 14, 0)
+_MIN_SAHMK_VERSION = (0, 15, 0)
+# Canonical public Developer API host (REST). Compatibility host app.sahmk.sa
+# remains supported via SAHMK_BASE_URL.
+_DEFAULT_BASE_URL = "https://api.sahmk.sa/api/v1"
 _HISTORICAL_INTERVALS = ("1d", "1w", "1m", "30m", "60m")
 _ARABIC_INDIC_DIGIT_TRANSLATION = str.maketrans(
     "٠١٢٣٤٥٦٧٨٩۰۱۲۳۴۵۶۷۸۹",
@@ -38,6 +41,19 @@ mcp = FastMCP(
 )
 
 
+def _resolve_base_url() -> str:
+    """Return the REST base URL for public Developer API calls.
+
+    Defaults to api.sahmk.sa. Override with SAHMK_BASE_URL (for example
+    https://app.sahmk.sa/api/v1) when needed. Do not point portal/dashboard
+    paths (/api/developers/*) at api.sahmk.sa.
+    """
+    override = os.environ.get("SAHMK_BASE_URL")
+    if override and override.strip():
+        return override.strip().rstrip("/")
+    return _DEFAULT_BASE_URL
+
+
 def _get_client() -> SahmkClient:
     _ensure_sahmk_min_version()
     api_key = os.environ.get("SAHMK_API_KEY")
@@ -46,7 +62,7 @@ def _get_client() -> SahmkClient:
             "SAHMK_API_KEY environment variable is not set. "
             "Get your key at https://sahmk.sa/developers"
         )
-    return SahmkClient(api_key)
+    return SahmkClient(api_key, base_url=_resolve_base_url())
 
 
 def _parse_semver(value: str) -> tuple[int, int, int]:

@@ -54,10 +54,23 @@ SDK repo: [sahmk-sa/sahmk-python](https://github.com/sahmk-sa/sahmk-python)
 
 [Request realtime access](https://www.sahmk.sa/developers/dashboard/realtime-access)
 
-## Required Environment Variable
+## Required Environment Variables
 
 `SAHMK_API_KEY` is required for all server runs (Claude Desktop, Cursor, and direct CLI usage).  
 Set it in your MCP client `env` config or export it before running `sahmk-mcp`.
+
+Optional: `SAHMK_BASE_URL` overrides the default public Developer API host.
+
+## API Host
+
+Default REST base URL is `https://api.sahmk.sa/api/v1/` (aligned with `sahmk` SDK `0.15.0`).  
+`https://app.sahmk.sa/api/v1/` remains a fully supported compatibility host — set `SAHMK_BASE_URL` if you need it:
+
+```bash
+export SAHMK_BASE_URL="https://app.sahmk.sa/api/v1"
+```
+
+Path shapes are unchanged (`/api/v1/`, `/api/v2/`, `/ws/v1/`). Portal/dashboard routes (`/api/developers/*`) stay on `app.sahmk.sa` and are not used by this MCP.
 
 ## Installation
 
@@ -65,7 +78,7 @@ Set it in your MCP client `env` config or export it before running `sahmk-mcp`.
 pip install sahmk-mcp
 ```
 
-Requires `sahmk>=0.14.0` for current MCP-SDK compatibility, including market depth, live trades, and events tools.
+Requires `sahmk>=0.15.0` for current MCP-SDK compatibility (default host `api.sahmk.sa`, market depth, live trades, and events tools).
 
 ## Security
 
@@ -92,6 +105,22 @@ Add to `~/Library/Application Support/Claude/claude_desktop_config.json`:
 }
 ```
 
+Optional compatibility host override (same paths on `app.sahmk.sa`):
+
+```json
+{
+  "mcpServers": {
+    "sahmk": {
+      "command": "sahmk-mcp",
+      "env": {
+        "SAHMK_API_KEY": "your_api_key",
+        "SAHMK_BASE_URL": "https://app.sahmk.sa/api/v1"
+      }
+    }
+  }
+}
+```
+
 ### Cursor
 
 Add to `.cursor/mcp.json`:
@@ -103,6 +132,22 @@ Add to `.cursor/mcp.json`:
       "command": "sahmk-mcp",
       "env": {
         "SAHMK_API_KEY": "your_api_key"
+      }
+    }
+  }
+}
+```
+
+Optional compatibility host override:
+
+```json
+{
+  "mcpServers": {
+    "sahmk": {
+      "command": "sahmk-mcp",
+      "env": {
+        "SAHMK_API_KEY": "your_api_key",
+        "SAHMK_BASE_URL": "https://app.sahmk.sa/api/v1"
       }
     }
   }
@@ -224,6 +269,7 @@ Note: intraday historical intervals (`30m`, `60m`) may be plan-gated. If unavail
 
 ## Release Notes
 
+- `0.7.0`: default public Developer API host → `api.sahmk.sa` (require `sahmk>=0.15.0`); `app.sahmk.sa` still supported via `SAHMK_BASE_URL`.
 - `0.6.0`: require `sahmk>=0.14.0`; add `get_trades` for recent live trade prints (Pro+).
 - `0.5.1`: document market-depth entitlement request link in the README.
 - `0.5.0`: require `sahmk>=0.13.0`; add `get_depth` (order-book ladder) and `get_events` (AI event summaries, Pro+).
