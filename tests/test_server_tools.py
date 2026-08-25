@@ -162,14 +162,14 @@ class TestNewCuratedTools(unittest.TestCase):
         self.assertEqual(result, expected)
 
     def test_ensure_sahmk_min_version_allows_supported_version(self):
-        with patch("sahmk.__version__", "0.15.0"):
+        with patch("sahmk.__version__", "0.16.0"):
             server._ensure_sahmk_min_version()
 
     def test_ensure_sahmk_min_version_blocks_old_version(self):
         with patch("sahmk.__version__", "0.14.0"):
             with self.assertRaisesRegex(
                 SahmkError,
-                r"sahmk>=0\.15\.0 is required for MCP-SDK compatibility",
+                r"sahmk>=0\.16\.0 is required for MCP-SDK compatibility",
             ):
                 server._ensure_sahmk_min_version()
 

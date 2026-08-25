@@ -63,7 +63,7 @@ Optional: `SAHMK_BASE_URL` overrides the default public Developer API host.
 
 ## API Host
 
-Default REST base URL is `https://api.sahmk.sa/api/v1/` (aligned with `sahmk` SDK `0.15.0`).  
+Default REST base URL is `https://api.sahmk.sa/api/v1/` (aligned with `sahmk` SDK `0.16.0`).  
 `https://app.sahmk.sa/api/v1/` remains a fully supported compatibility host — set `SAHMK_BASE_URL` if you need it:
 
 ```bash
@@ -78,7 +78,7 @@ Path shapes are unchanged (`/api/v1/`, `/api/v2/`, `/ws/v1/`). Portal/dashboard 
 pip install sahmk-mcp
 ```
 
-Requires `sahmk>=0.15.0` for current MCP-SDK compatibility (default host `api.sahmk.sa`, market depth, live trades, and events tools).
+Requires `sahmk>=0.16.0` for current MCP-SDK compatibility (default host `api.sahmk.sa`, market depth, live trades, and events tools).
 
 ## Security
 
@@ -271,6 +271,7 @@ Note: intraday historical intervals (`30m`, `60m`) may be plan-gated. If unavail
 
 ## Release Notes
 
+- `0.8.1`: bump minimum `sahmk` SDK requirement to `0.16.0`.
 - `0.8.0`: add optional `side` to `get_trades` events (`buy`/`sell`/`null`) with backward-compatible output for payloads that omit it.
 - `0.7.0`: default public Developer API host → `api.sahmk.sa` (require `sahmk>=0.15.0`); `app.sahmk.sa` still supported via `SAHMK_BASE_URL`.
 - `0.6.0`: require `sahmk>=0.14.0`; add `get_trades` for recent live trade prints (Pro+).

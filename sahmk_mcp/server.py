@@ -9,7 +9,7 @@ from fastmcp import FastMCP
 from sahmk import SahmkClient, SahmkError
 
 _DATE_RE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
-_MIN_SAHMK_VERSION = (0, 15, 0)
+_MIN_SAHMK_VERSION = (0, 16, 0)
 # Canonical public Developer API host (REST). Compatibility host app.sahmk.sa
 # remains supported via SAHMK_BASE_URL.
 _DEFAULT_BASE_URL = "https://api.sahmk.sa/api/v1"
