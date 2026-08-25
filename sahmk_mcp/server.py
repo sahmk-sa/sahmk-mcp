@@ -617,7 +617,22 @@ def _normalize_trades_response(raw: dict) -> dict:
     normalized.setdefault("symbol", None)
     normalized.setdefault("updated_at", None)
     normalized.setdefault("count", None)
-    normalized.setdefault("events", [])
+    events = normalized.get("events")
+    normalized_events: list = []
+    if isinstance(events, list):
+        for event in events:
+            if not isinstance(event, dict):
+                normalized_events.append(event)
+                continue
+            normalized_event = dict(event)
+            # Additive compatibility: preserve `side` exactly when upstream
+            # includes it (`buy`, `sell`, or null).
+            if "side" in event:
+                normalized_event["side"] = event.get("side")
+            normalized_events.append(normalized_event)
+    else:
+        normalized_events = []
+    normalized["events"] = normalized_events
     summary = normalized.get("summary")
     if not isinstance(summary, dict):
         summary = {}
@@ -1064,7 +1079,8 @@ def get_trades(
 ) -> dict:
     """Get recent live trade prints for a Saudi stock (Pro+ plan).
     Use this for the trade tape: individual executions with price, quantity, value,
-    and a short summary of recent activity. Requires exact exchange symbol."""
+    optional side (`buy`/`sell`/`null`), and a short summary of recent activity.
+    Requires exact exchange symbol."""
     normalized_symbol = _normalize_symbol_input(symbol)
     normalized_limit = _normalize_trades_limit(limit)
     client = _get_client()

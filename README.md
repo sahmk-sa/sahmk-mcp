@@ -187,6 +187,7 @@ sahmk-mcp
 - `get_depth.levels`: optional integer from 1 to 20 (backend default is typically 5; entitlement may cap below the request).
 - `get_trades.symbol`: prefers exact exchange symbol; MCP attempts SDK-backed identifier resolution for names/aliases when possible.
 - `get_trades.limit`: optional integer from 1 to 200 (backend default is typically 50; newest first).
+- `get_trades.events[].side`: optional trade side, one of `buy`, `sell`, or `null`.
 - `get_events.symbol`: optional exact exchange symbol filter; omit for market-wide recent events.
 - `get_events.limit`: optional integer from 1 to 100.
 - `get_historical.symbol`: prefers exact exchange symbol; MCP attempts SDK-backed identifier resolution for names/aliases when possible.
@@ -216,6 +217,7 @@ sahmk-mcp
 - Market depth with levels: `get_depth(symbol="2222", levels=10)`
 - Recent trades by exact symbol: `get_trades(symbol="2222")`
 - Recent trades with limit: `get_trades(symbol="2222", limit=20)`
+- Trades event side is additive and optional: each `events[]` item may include `side` = `buy`, `sell`, or `null`.
 - Recent market events: `get_events(limit=10)`
 - Events for one symbol: `get_events(symbol="1120", limit=5)`
 - Historical by exact symbol: `get_historical(symbol="1120", interval="1d")`
@@ -269,6 +271,7 @@ Note: intraday historical intervals (`30m`, `60m`) may be plan-gated. If unavail
 
 ## Release Notes
 
+- `0.8.0`: add optional `side` to `get_trades` events (`buy`/`sell`/`null`) with backward-compatible output for payloads that omit it.
 - `0.7.0`: default public Developer API host → `api.sahmk.sa` (require `sahmk>=0.15.0`); `app.sahmk.sa` still supported via `SAHMK_BASE_URL`.
 - `0.6.0`: require `sahmk>=0.14.0`; add `get_trades` for recent live trade prints (Pro+).
 - `0.5.1`: document market-depth entitlement request link in the README.

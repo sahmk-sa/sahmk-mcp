@@ -1164,8 +1164,78 @@ class TestNewCuratedTools(unittest.TestCase):
         self.assertEqual(result["symbol"], "2222")
         self.assertEqual(result["count"], 1)
         self.assertEqual(len(result["events"]), 1)
+        self.assertNotIn("side", result["events"][0])
         self.assertEqual(result["summary"]["trade_quantity"], 100)
         client.trades.assert_called_once_with("2222", limit=20)
+
+    @patch("sahmk_mcp.server._get_client")
+    def test_get_trades_preserves_side_buy(self, mock_get_client):
+        client = MagicMock()
+        client.trades.return_value.raw = {
+            "symbol": "2222",
+            "count": 1,
+            "events": [
+                {
+                    "event_time": "2026-07-29T10:00:00+00:00",
+                    "price": 26.5,
+                    "quantity": 100,
+                    "value": 2650.0,
+                    "side": "buy",
+                }
+            ],
+            "summary": {},
+        }
+        mock_get_client.return_value = client
+
+        result = server.get_trades(symbol="2222")
+
+        self.assertEqual(result["events"][0]["side"], "buy")
+
+    @patch("sahmk_mcp.server._get_client")
+    def test_get_trades_preserves_side_sell(self, mock_get_client):
+        client = MagicMock()
+        client.trades.return_value.raw = {
+            "symbol": "2222",
+            "count": 1,
+            "events": [
+                {
+                    "event_time": "2026-07-29T10:01:00+00:00",
+                    "price": 26.4,
+                    "quantity": 75,
+                    "value": 1980.0,
+                    "side": "sell",
+                }
+            ],
+            "summary": {},
+        }
+        mock_get_client.return_value = client
+
+        result = server.get_trades(symbol="2222")
+
+        self.assertEqual(result["events"][0]["side"], "sell")
+
+    @patch("sahmk_mcp.server._get_client")
+    def test_get_trades_preserves_side_null(self, mock_get_client):
+        client = MagicMock()
+        client.trades.return_value.raw = {
+            "symbol": "2222",
+            "count": 1,
+            "events": [
+                {
+                    "event_time": "2026-07-29T10:02:00+00:00",
+                    "price": 26.3,
+                    "quantity": 120,
+                    "value": 3156.0,
+                    "side": None,
+                }
+            ],
+            "summary": {},
+        }
+        mock_get_client.return_value = client
+
+        result = server.get_trades(symbol="2222")
+
+        self.assertIsNone(result["events"][0]["side"])
 
     def test_get_trades_rejects_invalid_limit(self):
         with self.assertRaisesRegex(ValueError, "Invalid limit"):
