@@ -162,14 +162,14 @@ class TestNewCuratedTools(unittest.TestCase):
         self.assertEqual(result, expected)
 
     def test_ensure_sahmk_min_version_allows_supported_version(self):
-        with patch("sahmk.__version__", "0.16.0"):
+        with patch("sahmk.__version__", "0.17.0"):
             server._ensure_sahmk_min_version()
 
     def test_ensure_sahmk_min_version_blocks_old_version(self):
-        with patch("sahmk.__version__", "0.14.0"):
+        with patch("sahmk.__version__", "0.16.0"):
             with self.assertRaisesRegex(
                 SahmkError,
-                r"sahmk>=0\.16\.0 is required for MCP-SDK compatibility",
+                r"sahmk>=0\.17\.0 is required for MCP-SDK compatibility",
             ):
                 server._ensure_sahmk_min_version()
 
@@ -1131,7 +1131,7 @@ class TestNewCuratedTools(unittest.TestCase):
     def test_get_historical_rejects_invalid_interval(self):
         with self.assertRaisesRegex(
             ValueError,
-            "Must be one of: '1d' \\(daily\\), '1w' \\(weekly\\), '1m' \\(monthly\\), '30m' \\(30-minute\\), or '60m' \\(60-minute\\)",
+            "Must be one of: 1min, 5min, 15min, 30min, 60min, 1d, 1w, 1mo",
         ):
             server.get_historical(symbol="1120", interval="15m")
 

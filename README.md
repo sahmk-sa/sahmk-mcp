@@ -24,9 +24,17 @@ This MCP exposes a curated set of Sahmk tools for AI agents, so assistants can q
 | `compare_symbols` | Multi-symbol normalized ratio/metrics comparison *(Starter/Pro limits vary)* |
 | `get_dividends` | Dividend history and yield data *(Starter+ plan)* |
 | `get_depth` | Order-book depth (bid/ask ladder, spread, imbalance) *(entitlement-gated)* |
-| `get_trades` | Recent live trade prints / tape *(Pro+ plan)* |
+| `get_trades` | Live trade prints / tape, newest first or one session by `date` with cursor paging *(Pro+ plan)* |
 | `get_events` | AI-generated stock event summaries *(Pro+ plan)* |
-| `get_historical` | Historical OHLCV data |
+| `get_historical` | Historical and intraday OHLCV (`1min` … `1mo`) |
+| `get_portfolios` / `get_portfolio` | List portfolios or read one |
+| `get_portfolio_summary` | Cash, holdings, and P&L for one portfolio |
+| `get_portfolio_performance` | Daily equity series for one portfolio |
+| `get_portfolio_transactions` | Full transaction ledger, newest first |
+| `create_portfolio` | Create a portfolio *(write)* |
+| `create_portfolio_transaction` | Append one transaction or an atomic batch *(write)* |
+| `reverse_portfolio_transaction` | Reverse the latest transaction *(write, destructive)* |
+| `set_portfolio_holdings` | Reconcile to target holdings: dry run, then apply with `plan_token` *(write, destructive)* |
 
 ## Identifier-First Contract
 
@@ -63,7 +71,7 @@ Optional: `SAHMK_BASE_URL` overrides the default public Developer API host.
 
 ## API Host
 
-Default REST base URL is `https://api.sahmk.sa/api/v1/` (aligned with `sahmk` SDK `0.16.0`).  
+Default REST base URL is `https://api.sahmk.sa/api/v1/` (aligned with `sahmk` SDK `0.17.0`).  
 `https://app.sahmk.sa/api/v1/` remains a fully supported compatibility host — set `SAHMK_BASE_URL` if you need it:
 
 ```bash
@@ -78,7 +86,7 @@ Path shapes are unchanged (`/api/v1/`, `/api/v2/`, `/ws/v1/`). Portal/dashboard 
 pip install sahmk-mcp
 ```
 
-Requires `sahmk>=0.16.0` for current MCP-SDK compatibility (default host `api.sahmk.sa`, market depth, live trades, and events tools).
+Requires `sahmk>=0.17.0` for current MCP-SDK compatibility (default host `api.sahmk.sa`, market depth, live trades with session recovery, events, canonical historical intervals, and portfolio tools).
 
 ## Security
 
@@ -186,7 +194,10 @@ sahmk-mcp
 - `get_depth.symbol`: prefers exact exchange symbol; MCP attempts SDK-backed identifier resolution for names/aliases when possible.
 - `get_depth.levels`: optional integer from 1 to 20 (backend default is typically 5; entitlement may cap below the request).
 - `get_trades.symbol`: prefers exact exchange symbol; MCP attempts SDK-backed identifier resolution for names/aliases when possible.
-- `get_trades.limit`: optional integer from 1 to 200 (backend default is typically 50; newest first).
+- `get_trades.limit`: optional integer from 1 to 200 (backend default is typically 50).
+- `get_trades.date`: optional `YYYY-MM-DD` (Asia/Riyadh). Reads one session from the recent tape (about three days) in receive order and adds a `page` object. Without it, prints are newest first.
+- `get_trades.after_seq`: optional non-negative integer; only prints with a greater `trade_seq`. Requires `date`. A filter, not a cursor.
+- `get_trades.cursor`: optional `page.next_cursor` from the previous page. Requires `date`. Follow it while `page.has_more` is true.
 - `get_trades.events[].side`: optional trade side, one of `buy`, `sell`, or `null`.
 - `get_events.symbol`: optional exact exchange symbol filter; omit for market-wide recent events.
 - `get_events.limit`: optional integer from 1 to 100.
@@ -194,7 +205,10 @@ sahmk-mcp
 - `companies_list.market`: `TASI` or `NOMU` (`NOMUC` alias is accepted and normalized).
 - `companies_list.limit`: integer greater than 0.
 - `companies_list.offset`: integer greater than or equal to 0.
-- `get_historical.interval`: `1d`, `1w`, `1m`, `30m`, or `60m`.
+- `get_historical.interval`: `1min`, `5min`, `15min`, `30min`, `60min`, `1d`, `1w`, or `1mo` (default `1d`). Legacy aliases `30m`, `60m`, and `1m` are accepted; `1m` means one month, not one minute.
+- Portfolio tools take `portfolio_id` as a positive integer from `get_portfolios`.
+- `create_portfolio_transaction`: single mode needs `transaction_type` (`deposit`, `buy`, `sell`, `withdrawal`, `dividend`, `fee`) and `amount_sar`; batch mode sends `transactions` plus `batch_idempotency_key` and no single-mode fields. Entries dated before the latest `executed_at` are rejected.
+- `set_portfolio_holdings`: `scope` is `full` or `partial`; `cash_policy` is `auto_fund` or `require_cash`; `dry_run` defaults to true; applying needs the dry run's `plan_token`.
 - Ambiguous identifiers raise `AMBIGUOUS_IDENTIFIER` with retry guidance and candidates when available.
 - Invalid identifiers and plan-gated requests return the underlying API error.
 
@@ -217,12 +231,21 @@ sahmk-mcp
 - Market depth with levels: `get_depth(symbol="2222", levels=10)`
 - Recent trades by exact symbol: `get_trades(symbol="2222")`
 - Recent trades with limit: `get_trades(symbol="2222", limit=20)`
+- One session, first page: `get_trades(symbol="2222", date="2026-11-22", limit=200)`
+- Next page: `get_trades(symbol="2222", date="2026-11-22", cursor="<page.next_cursor>")`
+- Prints after a known sequence: `get_trades(symbol="2222", date="2026-11-22", after_seq=204505)`
 - Trades event side is additive and optional: each `events[]` item may include `side` = `buy`, `sell`, or `null`.
 - Recent market events: `get_events(limit=10)`
 - Events for one symbol: `get_events(symbol="1120", limit=5)`
 - Historical by exact symbol: `get_historical(symbol="1120", interval="1d")`
 - Historical with explicit daily date range args: `get_historical(symbol="1120", from_date="2026-01-01", to_date="2026-03-31", interval="1d")`
-- Intraday historical by exact symbol (plan-gated by API key): `get_historical(symbol="1120", interval="60m")`
+- Intraday historical by exact symbol (plan-gated by API key): `get_historical(symbol="1120", interval="60min")`
+- One-minute bars: `get_historical(symbol="2222", interval="1min")`
+- Monthly bars: `get_historical(symbol="2222", interval="1mo")`
+- List portfolios: `get_portfolios()`
+- Portfolio P&L: `get_portfolio_summary(portfolio_id=12)`
+- Record a buy: `create_portfolio_transaction(portfolio_id=12, transaction_type="buy", symbol="2222", quantity=100, unit_price_sar=26.6, amount_sar=2660, idempotency_key="buy-2222-1")`
+- Preview a reconcile: `set_portfolio_holdings(portfolio_id=12, scope="partial", cash_policy="auto_fund", holdings=[{"symbol": "2222", "quantity": 100, "avg_cost_sar": 26.0}])`
 - Intraday historical with explicit date range args: `get_historical(symbol="1120", from_date="2026-05-01", to_date="2026-05-31", interval="60m")`
 
 ## Company Directory / Symbol Discovery
@@ -267,10 +290,11 @@ Use `companies_list` first to reduce invalid-symbol 404s before symbol-only tool
 
 Note: `get_financials` and `get_dividends` require Sahmk API access on Starter or higher. If unavailable for the current key, the MCP returns the underlying API error.
 Note: `get_depth` is entitlement-gated — [request access](https://www.sahmk.sa/developers/dashboard/realtime-access). `get_trades` and `get_events` require Pro+. If unavailable for the current key, the MCP surfaces the API error.
-Note: intraday historical intervals (`30m`, `60m`) may be plan-gated. If unavailable for the current key, the MCP surfaces the API error (for example `403 PLAN_LIMIT`).
+Note: historical intervals are plan-gated. Starter gets `1d`/`1w`/`1mo`; Pro adds `15min`/`30min`/`60min`; Business adds `5min`; `1min` is Enterprise where enabled. Intraday date windows are limited by plan. A valid interval outside the plan, or a range past its window, returns `403 PLAN_LIMIT`. If unavailable for the current key, the MCP surfaces the API error (for example `403 PLAN_LIMIT`).
 
 ## Release Notes
 
+- `0.9.0`: require `sahmk>=0.17.0`; `get_historical` accepts the canonical intervals (`1min`, `5min`, `15min`, `30min`, `60min`, `1d`, `1w`, `1mo`) plus legacy aliases; `get_trades` adds `date`, `after_seq`, and `cursor` for session recovery and returns `trade_seq` and `page`; add the nine portfolio tools available on the hosted server.
 - `0.8.1`: bump minimum `sahmk` SDK requirement to `0.16.0`.
 - `0.8.0`: add optional `side` to `get_trades` events (`buy`/`sell`/`null`) with backward-compatible output for payloads that omit it.
 - `0.7.0`: default public Developer API host → `api.sahmk.sa` (require `sahmk>=0.15.0`); `app.sahmk.sa` still supported via `SAHMK_BASE_URL`.

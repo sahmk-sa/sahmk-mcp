@@ -2,18 +2,24 @@
 
 import os
 import re
-from typing import Annotated, Literal, Optional
+from typing import Annotated, Any, Literal, Optional
 
 from fastmcp import FastMCP
 
 from sahmk import SahmkClient, SahmkError
 
 _DATE_RE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
-_MIN_SAHMK_VERSION = (0, 16, 0)
+_MIN_SAHMK_VERSION = (0, 17, 0)
 # Canonical public Developer API host (REST). Compatibility host app.sahmk.sa
 # remains supported via SAHMK_BASE_URL.
 _DEFAULT_BASE_URL = "https://api.sahmk.sa/api/v1"
-_HISTORICAL_INTERVALS = ("1d", "1w", "1m", "30m", "60m")
+# Canonical intervals first, then legacy aliases the API still accepts.
+# "1m" is one MONTH (alias of "1mo"); one-minute bars are "1min".
+_HISTORICAL_INTERVALS = (
+    "1min", "5min", "15min", "30min", "60min", "1d", "1w", "1mo",
+    "30m", "60m", "1m",
+)
+_PORTFOLIO_TRANSACTION_TYPES = ("deposit", "buy", "sell", "withdrawal", "dividend", "fee")
 _ARABIC_INDIC_DIGIT_TRANSLATION = str.maketrans(
     "٠١٢٣٤٥٦٧٨٩۰۱۲۳۴۵۶۷۸۹",
     "01234567890123456789",
@@ -32,6 +38,10 @@ mcp = FastMCP(
         "get_depth for order-book depth (bid/ask ladder), get_trades for recent live trade prints (Pro+), "
         "get_events for AI stock event summaries (Pro+), "
         "and get_historical for past price data. "
+        "Portfolio tools (get_portfolios, get_portfolio, get_portfolio_summary, get_portfolio_performance, "
+        "get_portfolio_transactions, create_portfolio, create_portfolio_transaction, "
+        "reverse_portfolio_transaction, set_portfolio_holdings) read and write the user's own SAHMK portfolios. "
+        "For set_portfolio_holdings, always run a dry run first, show the plan, and apply only after the user confirms. "
         "For get_financials/get_dividends/get_historical/get_depth/get_trades, requires exact exchange symbol. "
         "If the user provides a company name, first use companies_list. "
         "If a previous tool result included resolved_instrument.symbol, reuse that symbol. "
@@ -574,6 +584,28 @@ def _normalize_events_limit(limit: int | None) -> int | None:
     return limit
 
 
+def _normalize_trades_recovery(
+    date: str | None, after_seq: int | None, cursor: str | None
+) -> dict:
+    params: dict = {}
+    if date is not None:
+        _validate_date(date, "date")
+        params["date"] = date
+    if after_seq is not None:
+        if not isinstance(after_seq, int) or isinstance(after_seq, bool) or after_seq < 0:
+            raise ValueError(
+                f"Invalid after_seq: '{after_seq}'. Must be a non-negative integer."
+            )
+        params["after_seq"] = after_seq
+    if cursor is not None and str(cursor).strip():
+        params["cursor"] = str(cursor).strip()
+    if ("after_seq" in params or "cursor" in params) and "date" not in params:
+        raise ValueError(
+            "date (YYYY-MM-DD, Asia/Riyadh) is required with after_seq or cursor."
+        )
+    return params
+
+
 def _normalize_trades_limit(limit: int | None) -> int | None:
     if limit is None:
         return None
@@ -1073,20 +1105,35 @@ def get_trades(
     ],
     limit: Annotated[
         Optional[int],
-        "Optional max number of recent trade prints to return (1-200, newest first). "
-        "Backend default is typically 50.",
+        "Optional page size (1-200). Backend default is typically 50.",
+    ] = None,
+    date: Annotated[
+        Optional[str],
+        "Optional session date YYYY-MM-DD (Asia/Riyadh). Reads that session from the recent "
+        "tape (about three days) in receive order and adds a `page` object. Omit for the newest prints.",
+    ] = None,
+    after_seq: Annotated[
+        Optional[int],
+        "Optional: only prints with a greater trade_seq. Requires date. A filter, not a cursor.",
+    ] = None,
+    cursor: Annotated[
+        Optional[str],
+        "Optional page.next_cursor from the previous page. Requires date.",
     ] = None,
 ) -> dict:
-    """Get recent live trade prints for a Saudi stock (Pro+ plan).
-    Use this for the trade tape: individual executions with price, quantity, value,
-    optional side (`buy`/`sell`/`null`), and a short summary of recent activity.
+    """Get live trade prints for a Saudi stock (Pro+ plan).
+    Without date: the most recent prints, newest first.
+    With date: one session in receive order; follow page.next_cursor while page.has_more is true.
+    Each print has trade_seq, price, quantity, value, optional side (`buy`/`sell`/`null`),
+    and on dated calls market_session. This is the recent tape, not official session volume.
     Requires exact exchange symbol."""
     normalized_symbol = _normalize_symbol_input(symbol)
     normalized_limit = _normalize_trades_limit(limit)
+    recovery = _normalize_trades_recovery(date, after_seq, cursor)
     client = _get_client()
     try:
         raw = _to_raw_response(
-            client.trades(normalized_symbol, limit=normalized_limit)
+            client.trades(normalized_symbol, limit=normalized_limit, **recovery)
         )
     except SahmkError as error:
         try:
@@ -1097,7 +1144,7 @@ def get_trades(
             )
             if resolved_symbol and resolved_symbol != normalized_symbol:
                 raw = _to_raw_response(
-                    client.trades(resolved_symbol, limit=normalized_limit)
+                    client.trades(resolved_symbol, limit=normalized_limit, **recovery)
                 )
             else:
                 raise error
@@ -1162,8 +1209,9 @@ def get_historical(
     ] = None,
     interval: Annotated[
         Optional[str],
-        "'1d' for daily, '1w' for weekly, '1m' for monthly, '30m' for 30-minute, or "
-        "'60m' for 60-minute bars (default: '1d')",
+        "Bar size. Preferred: '1min', '5min', '15min', '30min', '60min', '1d', '1w', '1mo' "
+        "(default: '1d'). Legacy aliases accepted: '30m'->'30min', '60m'->'60min', "
+        "'1m'->'1mo' (monthly, NOT one-minute). Plan and date-window limits apply to intraday intervals.",
     ] = None,
 ) -> dict:
     """Get historical OHLCV price data for a Saudi stock over a date range.
@@ -1173,7 +1221,8 @@ def get_historical(
     if interval and interval not in _HISTORICAL_INTERVALS:
         raise ValueError(
             f"Invalid interval: '{interval}'. Must be one of: "
-            "'1d' (daily), '1w' (weekly), '1m' (monthly), '30m' (30-minute), or '60m' (60-minute)."
+            "1min, 5min, 15min, 30min, 60min, 1d, 1w, 1mo "
+            "(legacy aliases: 30m, 60m, 1m = monthly)."
         )
     normalized_symbol = _normalize_symbol_input(symbol)
     client = _get_client()
@@ -1231,6 +1280,267 @@ def companies_list(
             limit=limit,
             offset=offset,
         )
+    )
+
+
+
+# -----------------------------------------------------------------------------
+# Portfolios
+#
+# Names, titles, and safety hints match the hosted SAHMK MCP server so a client
+# sees the same tools locally and remotely.
+# -----------------------------------------------------------------------------
+
+
+def _portfolio_annotations(title: str, *, write: bool = False, destructive: bool = False) -> dict:
+    return {
+        "title": title,
+        "readOnlyHint": not write,
+        "idempotentHint": not write,
+        "destructiveHint": destructive,
+        "openWorldHint": False,
+    }
+
+
+def _positive_int(value: Any, name: str) -> int:
+    if not isinstance(value, int) or isinstance(value, bool) or value < 1:
+        raise ValueError(f"Invalid {name}: '{value}'. Must be a positive integer.")
+    return value
+
+
+def _normalize_transaction_type(value: Any) -> str:
+    normalized = str(value or "").strip().lower()
+    if normalized not in _PORTFOLIO_TRANSACTION_TYPES:
+        raise ValueError(
+            f"Invalid transaction_type: '{value}'. Must be one of: "
+            + ", ".join(_PORTFOLIO_TRANSACTION_TYPES)
+            + "."
+        )
+    return normalized
+
+
+_PortfolioId = Annotated[int, "Portfolio id (positive integer) from get_portfolios."]
+
+
+@mcp.tool(annotations=_portfolio_annotations("List Portfolios"))
+def get_portfolios(
+    workspace_id: Annotated[Optional[int], "Optional workspace id filter."] = None,
+) -> dict:
+    """List the user's SAHMK portfolios, most recently updated first."""
+    if workspace_id is not None:
+        workspace_id = _positive_int(workspace_id, "workspace_id")
+    return _get_client().portfolios(workspace_id=workspace_id)
+
+
+@mcp.tool(annotations=_portfolio_annotations("Get Portfolio"))
+def get_portfolio(portfolio_id: _PortfolioId) -> dict:
+    """Get one portfolio by id."""
+    return _get_client().portfolio(_positive_int(portfolio_id, "portfolio_id"))
+
+
+@mcp.tool(annotations=_portfolio_annotations("Create Portfolio", write=True))
+def create_portfolio(
+    name: Annotated[str, "Portfolio name. Must be unique for this user."],
+    description: Annotated[Optional[str], "Optional description."] = None,
+    workspace: Annotated[Optional[int], "Optional workspace id to link."] = None,
+    metadata: Annotated[Optional[dict], "Optional object of your own fields."] = None,
+) -> dict:
+    """Create a portfolio."""
+    if not str(name or "").strip():
+        raise ValueError("name is required.")
+    if workspace is not None:
+        workspace = _positive_int(workspace, "workspace")
+    return _get_client().create_portfolio(
+        name, description=description, workspace=workspace, metadata=metadata
+    )
+
+
+@mcp.tool(annotations=_portfolio_annotations("List Portfolio Transactions"))
+def get_portfolio_transactions(portfolio_id: _PortfolioId) -> dict:
+    """List the full transaction ledger for one portfolio, newest first."""
+    return _get_client().portfolio_transactions(_positive_int(portfolio_id, "portfolio_id"))
+
+
+@mcp.tool(annotations=_portfolio_annotations("Create Portfolio Transaction", write=True))
+def create_portfolio_transaction(
+    portfolio_id: _PortfolioId,
+    transaction_type: Annotated[
+        Optional[Literal["deposit", "buy", "sell", "withdrawal", "dividend", "fee"]],
+        "Single mode: transaction type.",
+    ] = None,
+    amount_sar: Annotated[Optional[float], "Single mode: amount in SAR (required)."] = None,
+    symbol: Annotated[Optional[str], "Stock symbol for buy, sell, and dividend."] = None,
+    quantity: Annotated[Optional[float], "Share quantity for buy and sell."] = None,
+    unit_price_sar: Annotated[Optional[float], "Price per share in SAR for buy and sell."] = None,
+    fee_sar: Annotated[Optional[float], "Optional fee in SAR."] = None,
+    executed_at: Annotated[Optional[str], "Optional ISO-8601 timestamp."] = None,
+    notes: Annotated[Optional[str], "Optional note."] = None,
+    metadata: Annotated[Optional[dict], "Optional object of your own fields."] = None,
+    idempotency_key: Annotated[
+        Optional[str], "Optional key; resending the same key does not create a duplicate."
+    ] = None,
+    transactions: Annotated[
+        Optional[list[dict]],
+        "Batch mode: list of transactions (each needs transaction_type and amount_sar). "
+        "Do not combine with single-mode fields.",
+    ] = None,
+    batch_idempotency_key: Annotated[
+        Optional[str], "Batch mode: required key for the whole batch."
+    ] = None,
+) -> dict:
+    """Create one portfolio transaction or an explicit atomic batch.
+    Transactions are append-only by executed_at order; backdated entries before the
+    latest executed_at are rejected."""
+    pid = _positive_int(portfolio_id, "portfolio_id")
+    client = _get_client()
+    if transactions is not None:
+        single_fields = {
+            "transaction_type": transaction_type,
+            "amount_sar": amount_sar,
+            "symbol": symbol,
+            "quantity": quantity,
+            "unit_price_sar": unit_price_sar,
+            "fee_sar": fee_sar,
+            "executed_at": executed_at,
+            "notes": notes,
+            "metadata": metadata,
+            "idempotency_key": idempotency_key,
+        }
+        if any(value is not None for value in single_fields.values()):
+            raise ValueError(
+                "Batch mode cannot include single-transaction fields. "
+                "Send either transactions + batch_idempotency_key, or single transaction fields."
+            )
+        if not isinstance(transactions, list) or not transactions:
+            raise ValueError("transactions must be a non-empty list.")
+        if not str(batch_idempotency_key or "").strip():
+            raise ValueError("batch_idempotency_key is required when transactions is provided.")
+        normalized = []
+        for item in transactions:
+            if not isinstance(item, dict):
+                raise ValueError("Each transaction must be an object.")
+            entry = dict(item)
+            entry["transaction_type"] = _normalize_transaction_type(item.get("transaction_type"))
+            if entry.get("amount_sar") is None:
+                raise ValueError("Each transaction needs amount_sar.")
+            normalized.append(entry)
+        return client.create_portfolio_transactions(
+            pid, normalized, str(batch_idempotency_key).strip()
+        )
+
+    if transaction_type is None:
+        raise ValueError("transaction_type is required.")
+    if amount_sar is None:
+        raise ValueError("amount_sar is required.")
+    return client.create_portfolio_transaction(
+        pid,
+        _normalize_transaction_type(transaction_type),
+        amount_sar,
+        symbol=_normalize_symbol_input(symbol) if symbol is not None else None,
+        quantity=quantity,
+        unit_price_sar=unit_price_sar,
+        fee_sar=fee_sar,
+        executed_at=executed_at,
+        notes=notes,
+        metadata=metadata,
+        idempotency_key=idempotency_key,
+    )
+
+
+@mcp.tool(
+    annotations=_portfolio_annotations("Set Portfolio Holdings", write=True, destructive=True)
+)
+def set_portfolio_holdings(
+    portfolio_id: _PortfolioId,
+    scope: Annotated[
+        Literal["full", "partial"],
+        "'full': the portfolio should hold exactly these holdings. 'partial': only the listed symbols change.",
+    ],
+    cash_policy: Annotated[
+        Literal["auto_fund", "require_cash"],
+        "auto_fund: when the plan needs cash, existing cash is consumed first and only the remaining "
+        "shortfall is auto-deposited; when the plan releases cash, auto-withdrawal is limited to the "
+        "amount released by plan actions and never withdraws pre-existing cash. require_cash: no "
+        "automatic deposits or withdrawals; the plan is blocked if cash would go negative, and "
+        "released money stays in cash.",
+    ],
+    holdings: Annotated[
+        list[dict],
+        "Target holdings: list of {symbol, quantity, avg_cost_sar}.",
+    ],
+    dry_run: Annotated[
+        bool, "True (default) previews the plan. False applies it and needs plan_token."
+    ] = True,
+    plan_token: Annotated[Optional[str], "plan.plan_token from the dry run. Required to apply."] = None,
+    expected_latest_transaction_id: Annotated[
+        Optional[int], "Optional guard: apply fails if the ledger moved since the dry run."
+    ] = None,
+) -> dict:
+    """Set target holdings for a portfolio with a dry-run/apply plan token flow.
+    Run with dry_run=true first, show the user the plan, and apply only after they confirm.
+    Applying writes ledger transactions."""
+    pid = _positive_int(portfolio_id, "portfolio_id")
+    if not isinstance(holdings, list):
+        raise ValueError("holdings is required.")
+    for item in holdings:
+        if not isinstance(item, dict):
+            raise ValueError("Each holding must be an object with symbol, quantity, avg_cost_sar.")
+        missing = [k for k in ("symbol", "quantity", "avg_cost_sar") if item.get(k) is None]
+        if missing:
+            raise ValueError(f"Each holding needs symbol, quantity, avg_cost_sar (missing: {', '.join(missing)}).")
+    if not dry_run and not str(plan_token or "").strip():
+        raise ValueError("plan_token from a dry run is required when dry_run is false.")
+    if expected_latest_transaction_id is not None:
+        expected_latest_transaction_id = _positive_int(
+            expected_latest_transaction_id, "expected_latest_transaction_id"
+        )
+    return _get_client().set_portfolio_holdings(
+        pid,
+        holdings,
+        scope,
+        cash_policy,
+        dry_run=dry_run,
+        plan_token=plan_token,
+        expected_latest_transaction_id=expected_latest_transaction_id,
+    )
+
+
+@mcp.tool(
+    annotations=_portfolio_annotations(
+        "Reverse Portfolio Transaction", write=True, destructive=True
+    )
+)
+def reverse_portfolio_transaction(
+    portfolio_id: _PortfolioId,
+    transaction_id: Annotated[int, "Transaction id to reverse."],
+    notes: Annotated[Optional[str], "Optional note."] = None,
+    metadata: Annotated[Optional[dict], "Optional object of your own fields."] = None,
+) -> dict:
+    """Reverse a transaction by id. Only the portfolio's latest transaction can be reversed."""
+    return _get_client().reverse_portfolio_transaction(
+        _positive_int(portfolio_id, "portfolio_id"),
+        _positive_int(transaction_id, "transaction_id"),
+        notes=notes,
+        metadata=metadata,
+    )
+
+
+@mcp.tool(annotations=_portfolio_annotations("Get Portfolio Summary"))
+def get_portfolio_summary(portfolio_id: _PortfolioId) -> dict:
+    """Get cash, holdings, and P&L for one portfolio."""
+    return _get_client().portfolio_summary(_positive_int(portfolio_id, "portfolio_id"))
+
+
+@mcp.tool(annotations=_portfolio_annotations("Get Portfolio Performance"))
+def get_portfolio_performance(
+    portfolio_id: _PortfolioId,
+    days: Annotated[Optional[int], "Optional window in days (backend default: 30)."] = None,
+) -> dict:
+    """Get the daily equity series for one portfolio."""
+    if days is not None:
+        days = _positive_int(days, "days")
+    return _get_client().portfolio_performance(
+        _positive_int(portfolio_id, "portfolio_id"), days=days
     )
 
 
